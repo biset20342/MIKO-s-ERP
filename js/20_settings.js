@@ -314,8 +314,8 @@ function applyTheme(theme){
   setSetting('ui_theme',theme||'default');
   toast('主題已切換','success');
   // Refresh theme picker in settings if visible
-  const panel=document.getElementById('stab-general');
-  if(panel&&panel.classList.contains('active')){
-    document.getElementById('content').innerHTML=renderSettings()||'';
+  const pickerContainer=document.getElementById('theme-picker-container');
+  if(pickerContainer){
+    pickerContainer.outerHTML=renderThemePickerHTML(theme||'default');
   }
 }

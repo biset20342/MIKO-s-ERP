@@ -294,7 +294,7 @@ function renderThemePickerHTML(current){
     {id:'warm',     name:'暖木炭',    sub:'深色 · 琥珀暖調',  bg:'#13110f', sb:'#1c1916', bd:'#2e2a25', ac:'#e07b39'},
     {id:'light',    name:'珍珠白',    sub:'亮色 · 清爽商務',  bg:'#f4f5f7', sb:'#ffffff', bd:'#d8dce6', ac:'#2563eb'},
   ];
-  let out='<div class="s-section"><div class="s-section-title">介面外觀</div>';
+  let out='<div class="s-section" id="theme-picker-container"><div class="s-section-title">介面外觀</div>';
   out+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:4px 0">';
   themes.forEach(t=>{
     const isActive=current===t.id;
