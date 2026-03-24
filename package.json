@@ -1,5 +1,14 @@
 {
+  "name": "miko-erp",
+  "version": "2.1.0",
+  "description": "ProjectERP — 設計委外版",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
   "dependencies": {
-    "acorn": "^8.16.0"
+    "better-sqlite3": "^11.9.1",
+    "express": "^4.21.2"
   }
 }

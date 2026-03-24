@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProjectERP — 設計委外版 v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="loading" class="show"><div class="spinner"></div><div class="loading-text">連線至本機伺服器...</div></div>
+<div id="toast"></div>
+
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-text">ProjectERP</div>
+    <div class="logo-sub">設計 / 委外加工版</div>
+    <!-- 🟢 AI 更新提示：當您有對此系統進行任何功能迭代或修改時，請務必合理遞增此處的版本號 (例如 v2.1.0、v2.2.0) -->
+    <div class="logo-ver" id="app-version">▸ Node.js Edition v2.1.0</div>
+  </div>
+  <nav class="nav">
+    <div class="nav-section">專案管理</div>
+    <div class="nav-item active" data-sec="dashboard" onclick="go('dashboard')"><span class="icon">📊</span>儀表板</div>
+    <div class="nav-item" data-sec="quotes" onclick="go('quotes')"><span class="icon">📋</span>報價單<span class="nav-badge" id="badge-qt" style="background:var(--accent)">0</span></div>
+    <div class="nav-item" data-sec="quote_history" onclick="go('quote_history')" style="margin-left:14px;border-left:2px solid var(--border);padding-left:14px;font-size:12.5px;color:var(--text2)"><span class="icon" style="font-size:13px">📜</span>版本與歷史</div>
+    <div class="nav-item" data-sec="orders" onclick="go('orders')"><span class="icon">📁</span>專案訂單<span class="nav-badge" id="badge-orders">0</span></div>
+    <div class="nav-item" data-sec="analytics" onclick="go('analytics')"><span class="icon">📈</span>分析與統計</div>
+    <div class="nav-section">委外管理</div>
+    <div class="nav-item" data-sec="rfq" onclick="go('rfq')"><span class="icon">📝</span>詢價單<span class="nav-badge" id="badge-rfq" style="background:var(--accent)">0</span></div>
+    <div class="nav-item" data-sec="outsource" onclick="go('outsource')"><span class="icon">🏭</span>採購單<span class="nav-badge" id="badge-os" style="background:var(--accent3)">0</span></div>
+    <div class="nav-section">財務</div>
+    <div class="nav-item" data-sec="receivables" onclick="go('receivables')"><span class="icon">📥</span>應收帳款<span class="nav-badge" id="badge-ar">0</span></div>
+    <div class="nav-item" data-sec="payables" onclick="go('payables')"><span class="icon">📤</span>應付帳款</div>
+    <div class="nav-section">基本資料</div>
+    <div class="nav-item" data-sec="customers" onclick="go('customers')"><span class="icon">👥</span>客戶</div>
+    <div class="nav-item" data-sec="suppliers" onclick="go('suppliers')"><span class="icon">🏢</span>合作廠商</div>
+    <div class="nav-item" data-sec="services" onclick="go('services')"><span class="icon">🔧</span>服務項目</div>
+    <div class="nav-section">系統</div>
+    <div class="nav-item" data-sec="actlog" onclick="go('actlog')"><span class="icon">🗒️</span>操作紀錄</div>
+    <div class="nav-item" data-sec="trash" onclick="go('trash')"><span class="icon">🗑️</span>回收桶<span class="nav-badge" id="badge-trash" style="background:var(--text3)">0</span></div>
+    <div class="nav-item" data-sec="settings" onclick="go('settings')"><span class="icon">⚙️</span>設定</div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-row">
+      <div class="avatar">王</div>
+      <div><div class="user-name">王小明</div><div class="user-role">負責人</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--accent2);margin-top:4px;padding:0 4px" id="save-indicator">✓ 自動存檔</div>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-info">
+      <div class="topbar-title" id="tb-title">儀表板</div>
+      <div class="topbar-sub" id="tb-sub"></div>
+    </div>
+    <button class="btn btn-ghost" id="csv-btn" style="display:none" onclick="hCSV()">↓ CSV</button>
+    <button class="btn btn-primary" id="add-btn" style="display:none" onclick="hAdd()">+ 新增</button>
+  </div>
+  <div id="content"></div>
+</div>
+
+<div id="overlay" onclick="closeModal()">
+  <div id="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">—</div>
+      <div class="modal-close" onclick="closeModal()">✕</div>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" id="modal-save">儲存</button>
+    </div>
+  </div>
+</div>
+
+  <script src="js/02_db.js"></script>
+  <script src="js/03_autosave.js"></script>
+  <script src="js/04_utils.js"></script>
+  <script src="js/05_nav.js"></script>
+  <script src="js/06_modal.js"></script>
+  <script src="js/07_items.js"></script>
+  <script src="js/08_dashboard.js"></script>
+  <script src="js/09_quotes.js"></script>
+  <script src="js/10_quote_history.js"></script>
+  <script src="js/11_orders.js"></script>
+  <script src="js/12_milestones.js"></script>
+  <script src="js/13_phase_log.js"></script>
+  <script src="js/14_outsource.js"></script>
+  <script src="js/15_rfq.js"></script>
+  <script src="js/16_finance.js"></script>
+  <script src="js/17_master.js"></script>
+  <script src="js/18_analytics.js"></script>
+  <script src="js/19_trash.js"></script>
+  <script src="js/20_settings.js"></script>
+  <script src="js/21_csv.js"></script>
+  <script src="js/22_pdf.js"></script>
+  <script src="js/23_init.js"></script>
+</body>
+</html>
