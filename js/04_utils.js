@@ -1,0 +1,677 @@
+/**
+ * 04_utils.js — 自動分拆模組
+ * 對外暴露：...
+ * 依賴：...
+ */
+
+/** 處理 fmt 相關操作。 */
+function fmt(n){return Number(n||0).toLocaleString('zh-TW');}
+
+/** 處理 fmtN 相關操作。 */
+function fmtN(n){return Number(n||0).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,',');}
+
+/** 處理 today 相關操作。 */
+function today(){return new Date().toISOString().split('T')[0];}
+
+/** 處理 addDays 相關操作。 */
+function addDays(d,n){const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().split('T')[0];}
+
+/** 處理 escQ 相關操作。 */
+function escQ(s){return String(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+
+const PHASES=[
+  {key:'pending',label:'待確認',cls:'badge-yellow'},
+  {key:'designing',label:'設計中',cls:'badge-purple'},
+  {key:'outsourcing',label:'委外中',cls:'badge-blue'},
+  {key:'reviewing',label:'待審核',cls:'badge-yellow'},
+  {key:'delivering',label:'待交付',cls:'badge-blue'},
+  {key:'completed',label:'已完成',cls:'badge-green'},
+  {key:'cancelled',label:'已取消',cls:'badge-gray'},
+];
+
+const PM=Object.fromEntries(PHASES.map(p=>[p.key,p]));
+
+/** 處理 phBadge 相關操作。 */
+function phBadge(p){const m=PM[p]||{label:p,cls:'badge-gray'};return`<span class="badge ${m.cls}">${m.label}</span>`;}
+
+const QSTATUS={
+  draft:     {label:'草稿',    cls:'badge-gray'},
+  sent:      {label:'已發送',  cls:'badge-blue'},
+  accepted:  {label:'已接受',  cls:'badge-green'},
+  rejected:  {label:'已拒絕',  cls:'badge-red'},
+  expired:   {label:'已過期',  cls:'badge-gray'},
+  superseded:{label:'已被取代',cls:'badge-gray'},
+};
+
+/** 處理 qsBadge 相關操作。 */
+function qsBadge(s){const m=QSTATUS[s]||{label:s,cls:'badge-gray'};return`<span class="badge ${m.cls}">${m.label}</span>`;}
+
+/** 處理 stBadge 相關操作。 */
+function stBadge(s){
+  const m={unpaid:'badge-yellow 未付款',paid:'badge-green 已付款',overdue:'badge-red 已逾期',pending:'badge-yellow 待確認',confirmed:'badge-blue 已確認',received:'badge-green 已完成',cancelled:'badge-gray 已取消'};
+  const v=m[s]||('badge-gray '+s);const[c,l]=v.split(' ');return`<span class="badge ${c}">${l}</span>`;
+}
+
+/** 處理 nextNo 相關操作。 */
+function nextNo(type,tbl){
+  // type: 'PRJ','QT','OS' — read prefix/padding from settings
+  const prefix=getSetting('prefix_'+type.toLowerCase(), type);
+  const pad=parseInt(getSetting('no_padding','3'))||3;
+  const sep=getSetting('no_separator','-');
+  const yearFmt=getSetting('no_year_fmt','YYYY');
+  const yr=yearFmt==='YYYY'?new Date().getFullYear():
+            yearFmt==='YY'?String(new Date().getFullYear()).slice(-2):'';
+  const c=q1(`SELECT COUNT(*) as c FROM ${tbl}`)?.c||0;
+  const seq=String(c+1).padStart(pad,'0');
+  return yr?`${prefix}${sep}${yr}${seq}`:`${prefix}${seq}`;
+}
+
+const ACT_TYPES={
+  quote:    {icon:'📋', label:'報價單',   color:'var(--accent5)'},
+  order:    {icon:'📁', label:'專案訂單', color:'var(--accent)'},
+  outsource:{icon:'🏭', label:'採購單',   color:'var(--accent3)'},
+  receivable:{icon:'💰',label:'收款',     color:'var(--accent2)'},
+  payable:  {icon:'💳', label:'付款',     color:'var(--accent4)'},
+  rfq:      {icon:'📝', label:'詢價',     color:'var(--accent5)'},
+};
+
+/** 處理 filterActLog 相關操作。 */
+function filterActLog(sq,type){
+  let rows=q("SELECT * FROM activity_log ORDER BY id DESC");
+  if(type) rows=rows.filter(r=>r.type===type);
+  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['action','ref_no','ref_title','entity','note'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
+  const from=document.getElementById('fact-from')?.value;
+  const to=document.getElementById('fact-to')?.value;
+  if(from) rows=rows.filter(r=>(r.created_at||'')>=from);
+  if(to)   rows=rows.filter(r=>(r.created_at||'').substring(0,10)<=to);
+  document.getElementById('act-tbody').innerHTML=renderActRows(rows);
+  document.getElementById('act-count').textContent=rows.length+' 筆';
+}
+
+/** 處理 filterPft 相關操作。 */
+function filterPft(sq){
+  let rows=q("SELECT o.id,o.order_no,o.title,c.name as cn,o.date,o.phase,o.total,COALESCE((SELECT SUM(os.total) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL),0) as cost FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ORDER BY o.date DESC");
+  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['order_no','title','cn'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
+  document.getElementById('pft-tbody').innerHTML=renderPftRows(rows);
+  document.getElementById('pft-count').textContent=rows.length+' 筆';
+}
+
+/** 處理 showProjectPnL 相關操作。 */
+function showProjectPnL(orderId){
+  _analyticsTab='project';
+  const c=document.getElementById('content');
+  if(c) c.innerHTML=renderAnalytics();
+  setTimeout(()=>{
+    const sel=document.getElementById('proj-pnl-select');
+    if(sel){sel.value=orderId;renderProjectDetail(orderId);}
+  },50);
+}
+
+/** 處理 calcSQTax 相關操作。 */
+function calcSQTax(){
+  const excl=parseFloat(document.getElementById('f-sq-excl')?.value)||0;
+  const tax=parseFloat(document.getElementById('f-sq-tax')?.value||'5');
+  const el=document.getElementById('f-sq-total');
+  if(el)el.value=(Math.round(excl*(1+tax/100)*100)/100).toFixed(2);
+}
+
+/** 處理 filterAR 相關操作。 */
+function filterAR(sq,st){
+  let rows=q("SELECT r.*,o.order_no,o.title,c.name as cn FROM receivables r LEFT JOIN orders o ON r.order_id=o.id LEFT JOIN customers c ON o.customer_id=c.id ORDER BY r.due_date ASC");
+  if(st)rows=rows.filter(r=>r.status===st);
+  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['order_no','title','cn','milestone_name'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
+  document.getElementById('ar-tbody').innerHTML=renderARRows(rows);
+  document.getElementById('ar-count').textContent=rows.length+' 筆';
+}
+
+/** 處理 showEditAR 相關操作。 */
+function showEditAR(id,amount,dueDate,name,orderId){
+  openModal('編輯應收帳款',
+    `<div class="form-row"><label>里程碑名稱</label><input type="text" id="f-msname" value="${escQ(name||'')}"></div>
+    <div class="form-row-2">
+      <div class="form-row"><label>金額</label><input type="number" id="f-amount" value="${amount}" step="0.01"></div>
+      <div class="form-row"><label>到期日</label><input type="date" id="f-due" value="${dueDate||''}"></div>
+    </div>`,
+    ()=>{
+      const nm=document.getElementById('f-msname').value.trim();
+      const amt=parseFloat(document.getElementById('f-amount').value)||0;
+      const due=document.getElementById('f-due').value;
+      if(!due){toast('請填寫到期日','error');return;}
+      exec("UPDATE receivables SET milestone_name=?,amount=?,due_date=? WHERE id=?",[nm||'付款',amt,due,id]);
+      toast('應收帳款已更新','success');closeModal();
+      if(orderId)showOrderDetail(orderId);else go(cur);
+    });
+}
+
+/** 處理 filterAP 相關操作。 */
+function filterAP(sq,st){
+  let rows=q("SELECT p.*,os.os_no,os.description,s.name as sn FROM payables p LEFT JOIN outsource_orders os ON p.os_id=os.id LEFT JOIN suppliers s ON os.supplier_id=s.id ORDER BY p.due_date ASC");
+  if(st)rows=rows.filter(r=>r.status===st);
+  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['os_no','sn','description'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
+  document.getElementById('ap-tbody').innerHTML=renderAPRows(rows);
+  document.getElementById('ap-count').textContent=rows.length+' 筆';
+}
+
+/** 處理 showEditAP 相關操作。 */
+function showEditAP(id,amount,dueDate){
+  openModal('編輯應付帳款',
+    `<div class="form-row-2">
+      <div class="form-row"><label>金額</label><input type="number" id="f-amount" value="${amount}" step="0.01"></div>
+      <div class="form-row"><label>到期日</label><input type="date" id="f-due" value="${dueDate||''}"></div>
+    </div>`,
+    ()=>{
+      const amt=parseFloat(document.getElementById('f-amount').value)||0;
+      const due=document.getElementById('f-due').value;
+      if(!due){toast('請填寫到期日','error');return;}
+      exec("UPDATE payables SET amount=?,due_date=? WHERE id=?",[amt,due,id]);
+      toast('應付帳款已更新','success');closeModal();go(cur);
+    });
+}
+
+/** 處理 fTbl 相關操作。 */
+function fTbl(sq,tid,dfn,rfn,fields,cid,unit){
+  let rows=dfn();
+  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>fields.some(f=>String(r[f]||'').toLowerCase().includes(s)));}
+  document.getElementById(tid).innerHTML=rfn(rows);
+  document.getElementById(cid).textContent=rows.length+' '+unit;
+}
+
+/** 處理 refreshSvcDatalist 相關操作。 */
+function refreshSvcDatalist(){
+  // Always remove & recreate so edits pick up latest _svcs
+  const old=document.getElementById('svc-list');
+  if(old)old.remove();
+  if(!_svcs.length)return;
+  const dl=document.createElement('datalist');
+  dl.id='svc-list';
+  _svcs.forEach(s=>{const o=document.createElement('option');o.value=s.name;o.label='$'+Number(s.default_price||0).toLocaleString('zh-TW')+'／'+s.unit;dl.appendChild(o);});
+  document.body.appendChild(dl);
+}
+
+/** 處理 addMSRow 相關操作。 */
+function addMSRow(){
+  const c=document.getElementById('ms-inputs');if(!c)return;
+  const d=document.createElement('div');
+  d.style.cssText='display:grid;grid-template-columns:1fr 110px 110px 22px;gap:5px;align-items:center;margin-bottom:5px';
+  d.innerHTML=`<input type="text" class="ms-name" placeholder="里程碑名稱（訂金、尾款...）" style="padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:'Noto Sans TC',sans-serif;outline:none">
+  <input type="number" class="ms-amount" placeholder="金額" step="0.01" style="padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:'Noto Sans TC',sans-serif;outline:none">
+  <input type="date" class="ms-due" value="${addDays(today(),30)}" style="padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:'Noto Sans TC',sans-serif;outline:none">
+  <button class="rm-btn" onclick="this.parentElement.remove()">✕</button>`;
+  c.appendChild(d);
+}
+
+/** 處理 emptyTrash 相關操作。 */
+function emptyTrash(){
+  confirmDialog('確定要清空整個回收桶嗎？所有資料將永久消失，無法還原。',()=>{
+    ['quotes','orders','outsource_orders'].forEach(t=>{
+      exec('DELETE FROM '+t+' WHERE deleted_at IS NOT NULL');
+    });
+    toast('回收桶已清空','success');go(cur);
+  });
+}
+
+/** 處理 restoreFromTrash 相關操作。 */
+function restoreFromTrash(table,id){
+  exec('UPDATE '+table+' SET deleted_at=NULL WHERE id=?',[id]);
+  toast('已還原','success');go(cur);
+}
+
+/** 處理 setSetting 相關操作。 */
+function setSetting(key,value){exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)",[key,String(value)]);}
+
+/** 處理 switchSettingsTab 相關操作。 */
+function switchSettingsTab(id){
+  window._settingsTab=id;
+  document.querySelectorAll('.s-tab').forEach(el=>{
+    el.classList.toggle('active',el.onclick&&el.onclick.toString().includes("'"+id+"'"));
+  });
+  document.querySelectorAll('.s-panel').forEach(el=>{
+    el.classList.toggle('active',el.id==='stab-'+id);
+  });
+  if(id==='numbering')setTimeout(updateNoPreview,50);
+}
+
+/** 處理 loadSignatureImg 相關操作。 */
+function loadSignatureImg(input){
+  const file=input.files[0];
+  if(!file)return;
+  if(file.size>200*1024){toast('圖片過大，請使用 200KB 以下的圖片','error');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const data=e.target.result;
+    setSetting('pdf_signature',data);
+    const prev=document.getElementById('sig-preview');
+    if(prev){prev.outerHTML='<img src="'+data+'" class="sig-img" id="sig-preview">';}
+    toast('簽名圖片已上傳並儲存 ✓','success');
+  };
+  reader.readAsDataURL(file);
+}
+
+/** 處理 clearSignature 相關操作。 */
+function clearSignature(){
+  confirmDialog('確定清除簽名圖片嗎？',()=>{
+    setSetting('pdf_signature','');
+    const prev=document.getElementById('sig-preview');
+    if(prev){prev.outerHTML='<div id="sig-preview" style="font-size:11px;color:var(--text3)">尚未上傳簽名圖片</div>';}
+    toast('簽名已清除','success');
+  });
+}
+
+/** 處理 initTheme 相關操作。 */
+function initTheme(){
+  const t=getSetting('ui_theme','default');
+  if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t);
+}
+
+/** 處理 updateNoPreview 相關操作。 */
+function updateNoPreview(){
+  const el=document.getElementById('no-preview');
+  if(!el)return;
+  const qtEx=nextNo('QT','quotes');
+  const prjEx=nextNo('PRJ','orders');
+  const osEx=nextNo('OS','outsource_orders');
+  el.textContent=qtEx+' / '+prjEx+' / '+osEx;
+}
+
+/** 處理 applyUserSettings 相關操作。 */
+function applyUserSettings(){
+  const name=getSetting('user_name','王小明');
+  const role=getSetting('user_role','負責人');
+  const nameEl=document.querySelector('.user-name');
+  const roleEl=document.querySelector('.user-role');
+  const avatarEl=document.querySelector('.avatar');
+  const previewEl=document.getElementById('avatar-preview');
+  if(nameEl)nameEl.textContent=name;
+  if(roleEl)roleEl.textContent=role;
+  if(avatarEl)avatarEl.textContent=(name||'王')[0];
+  if(previewEl)previewEl.textContent=(name||'王')[0];
+}
+
+/** 處理 confirmClearTransactions 相關操作。 */
+function confirmClearTransactions(){
+  openDangerModal(
+    '清除所有交易資料',
+    '此操作將刪除：報價單、專案訂單、委外單、應收帳款、應付帳款及所有明細。<br><br>客戶、廠商、服務項目與系統設定<strong>不受影響</strong>。',
+    'CLEAR-DATA',
+    ()=>{
+      const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders'];
+      tables.forEach(t=>exec(`DELETE FROM ${t}`));
+      toast('交易資料已全部清除','success');closeModal();go('settings');
+    }
+  );
+}
+
+/** 處理 confirmClearMasterData 相關操作。 */
+function confirmClearMasterData(){
+  openDangerModal(
+    '清除所有基本資料',
+    '此操作將刪除：客戶清單、合作廠商、服務項目。<br><br>現有訂單的客戶欄位將顯示為空白，但交易記錄本身<strong>不受影響</strong>。',
+    'CLEAR-MASTER',
+    ()=>{
+      exec("DELETE FROM services");
+      exec("DELETE FROM suppliers");
+      exec("DELETE FROM customers");
+      toast('基本資料已全部清除','success');closeModal();go('settings');
+    }
+  );
+}
+
+/** 處理 confirmClearAll 相關操作。 */
+function confirmClearAll(){
+  openDangerModal(
+    '清除所有資料',
+    '此操作將刪除資料庫中<strong>所有</strong>交易記錄與基本資料。系統設定（公司資訊、預設值）不受影響。<br><br>建議執行前先匯出 DB 備份。',
+    'CLEAR-ALL',
+    ()=>{
+      const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders','services','suppliers','customers'];
+      tables.forEach(t=>exec(`DELETE FROM ${t}`));
+      toast('所有資料已清除','success');closeModal();go('settings');
+    }
+  );
+}
+
+/** 處理 confirmResetSettings 相關操作。 */
+function confirmResetSettings(){
+  openDangerModal(
+    '重置所有設定',
+    '此操作將清除公司資訊、使用者姓名職稱、所有預設值，恢復為系統預設狀態。<br><br>所有資料<strong>不受影響</strong>。',
+    'RESET-SETTINGS',
+    ()=>{
+      exec("DELETE FROM settings");
+      applyUserSettings();
+      toast('設定已重置為預設值','success');closeModal();go('settings');
+    }
+  );
+}
+
+/** 處理 confirmFullReset 相關操作。 */
+function confirmFullReset(){
+  openDangerModal(
+    '全部重置（清除所有資料＋設定＋重新載入範例）',
+    '此操作將清除<strong>所有資料與設定</strong>，然後重新載入範例資料。等同於全新安裝。<br><br>所有真實資料將永久消失，無法還原。',
+    'FULL-RESET',
+    ()=>{
+      const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders','services','suppliers','customers','settings'];
+      tables.forEach(t=>exec(`DELETE FROM ${t}`));
+      seedData();
+      toast('系統已完整重置，範例資料已重新載入','success');closeModal();go('dashboard');
+    }
+  );
+}
+
+/** 處理 openDangerModal 相關操作。 */
+function openDangerModal(title,desc,confirmWord,onConfirm){
+  openModal(title,
+    `<div class="confirm-box" style="border-color:rgba(247,110,110,.3)">
+      <div class="confirm-msg">${desc}</div>
+    </div>
+    <div class="confirm-input-wrap">
+      <label>請輸入 <span style="font-family:'DM Mono',monospace;color:var(--accent4);background:rgba(247,110,110,.08);padding:1px 6px;border-radius:4px">${confirmWord}</span> 以確認操作</label>
+      <input type="text" id="danger-confirm-input" placeholder="輸入確認碼..." autocomplete="off">
+    </div>`,
+    ()=>{
+      const val=document.getElementById('danger-confirm-input')?.value?.trim();
+      if(val!==confirmWord){toast('確認碼錯誤，操作已取消','error');return;}
+      onConfirm();
+    }
+  );
+  const btn=document.getElementById('modal-save');
+  btn.textContent='確認執行';btn.className='btn btn-danger';
+}
+
+/** 處理 autoSaveWithBackup 相關操作。 */
+async function autoSaveWithBackup(){
+  if(!window._nasFileHandle&&!window._backupDirHandle)return;
+  const bytes=db.export();
+  // 1. 覆蓋主要存檔
+  if(window._nasFileHandle){
+    try{
+      const w=await window._nasFileHandle.createWritable();
+      await w.write(bytes);await w.close();
+      const el=document.getElementById('nas-status');
+      if(el){el.textContent='✅ 自動存檔：'+window._nasFileHandle.name+' （'+new Date().toLocaleTimeString('zh-TW')+'）';el.style.color='var(--accent2)';}
+    }catch(e){
+      window._nasFileHandle=null;
+      updateAutoSaveStatusUI();
+    }
+  }
+  // 2. 建立備份（最多3份，slot 循環 1→2→3→1）
+  if(window._backupDirHandle){
+    try{
+      let slot=(parseInt(localStorage.getItem('_erp_bk_slot')||'0')%3)+1;
+      localStorage.setItem('_erp_bk_slot',slot);
+      const fh=await window._backupDirHandle.getFileHandle('project-erp-backup-'+slot+'.db',{create:true});
+      const w=await fh.createWritable();
+      await w.write(bytes);await w.close();
+      const el=document.getElementById('backup-dir-status');
+      if(el){el.textContent='✅ 備份 '+slot+'/3：'+window._backupDirHandle.name+' （'+new Date().toLocaleTimeString('zh-TW')+'）';el.style.color='var(--accent2)';}
+    }catch(e){console.error('備份失敗',e);}
+  }
+}
+
+/** 處理 setupAutoSaveFile 相關操作。 */
+async function setupAutoSaveFile(){
+  if(typeof showSaveFilePicker==='undefined'){toast('您的瀏覽器不支援此功能（請使用 Chrome/Edge）','error');return;}
+  const opts={suggestedName:'project-erp.db',types:[{description:'SQLite Database',accept:{'application/octet-stream':['.db']}}],startIn:'documents'};
+  try{
+    const handle=await showSaveFilePicker(opts);
+    window._nasFileHandle=handle;
+    await autoSaveWithBackup();
+    updateAutoSaveStatusUI();
+    toast('已連結存檔路徑：'+handle.name,'success');
+  }catch(e){if(e.name!=='AbortError')toast('設定失敗：'+e.message,'error');}
+}
+
+/** 處理 clearAutoSaveFile 相關操作。 */
+function clearAutoSaveFile(){
+  window._nasFileHandle=null;
+  updateAutoSaveStatusUI();
+  toast('已取消連結存檔路徑','success');
+}
+
+/** 處理 setupBackupDir 相關操作。 */
+async function setupBackupDir(){
+  if(typeof showDirectoryPicker==='undefined'){toast('您的瀏覽器不支援此功能（請使用 Chrome/Edge）','error');return;}
+  try{
+    window._backupDirHandle=await showDirectoryPicker({mode:'readwrite'});
+    localStorage.setItem('_erp_bk_slot','0');
+    updateAutoSaveStatusUI();
+    toast('已連結備份資料夾：'+window._backupDirHandle.name,'success');
+  }catch(e){if(e.name!=='AbortError')toast('選擇資料夾失敗：'+e.message,'error');}
+}
+
+/** 處理 clearBackupDir 相關操作。 */
+function clearBackupDir(){
+  window._backupDirHandle=null;
+  updateAutoSaveStatusUI();
+  toast('已取消備份資料夾連結','success');
+}
+
+/** 處理 updateAutoSaveStatusUI 相關操作。 */
+function updateAutoSaveStatusUI(){
+  const el1=document.getElementById('autosave-file-status');
+  const el2=document.getElementById('backup-dir-status');
+  const elNas=document.getElementById('nas-status');
+  if(el1){
+    if(window._nasFileHandle){el1.textContent='已連結：'+window._nasFileHandle.name;el1.style.color='var(--accent2)';}
+    else{el1.textContent='尚未設定存檔路徑';el1.style.color='var(--text3)';}
+  }
+  if(el2){
+    if(window._backupDirHandle){el2.textContent='已連結：'+window._backupDirHandle.name+'（備份於 project-erp-backup-1/2/3.db）';el2.style.color='var(--accent2)';}
+    else{el2.textContent='尚未設定備份資料夾';el2.style.color='var(--text3)';}
+  }
+  if(elNas){
+    if(window._nasFileHandle){elNas.textContent='✅ 已連結存檔：'+window._nasFileHandle.name;elNas.style.color='var(--accent2)';}
+    else{elNas.textContent='尚未連結存檔檔案';elNas.style.color='var(--text3)';}
+  }
+}
+
+/** 處理 saveToNAS 相關操作。 */
+function saveToNAS(){
+  if(typeof showSaveFilePicker==='undefined'){
+    // 瀏覽器不支援 File System Access API — 改用下載
+    exportDB();
+    toast('瀏覽器不支援直接存檔，已下載備份，請手動貼回 NAS','success');
+    return;
+  }
+  // 若已有記憶的檔案位置，直接寫入不再跳出選擇視窗
+  if(window._nasFileHandle){
+    writeNASFile(window._nasFileHandle).then(()=>{
+      const el=document.getElementById('nas-status');
+      if(el){el.textContent='✅ 已儲存：'+window._nasFileHandle?.name+' （'+new Date().toLocaleTimeString('zh-TW')+'）';el.style.color='var(--accent2)';}
+      toast('已儲存 ✓','success');
+    }).catch(e=>{
+      // 檔案可能已被移動或權限失效，改為重新選擇
+      window._nasFileHandle=null;
+      toast('無法寫入上次檔案，請重新選擇位置','error');
+      saveToNAS();
+    });
+    return;
+  }
+  const opts={
+    suggestedName:'project-erp.db',
+    types:[{description:'SQLite Database',accept:{'application/octet-stream':['.db']}}],
+    startIn:'documents',
+  };
+  showSaveFilePicker(opts).then(handle=>{
+    window._nasFileHandle=handle;
+    return writeNASFile(handle);
+  }).then(()=>{
+    const el=document.getElementById('nas-status');
+    if(el){el.textContent='✅ 已儲存：'+window._nasFileHandle?.name+' （'+new Date().toLocaleTimeString('zh-TW')+'）';el.style.color='var(--accent2)';}
+    toast('已儲存 ✓','success');
+  }).catch(e=>{
+    if(e.name!=='AbortError')toast('存檔失敗：'+e.message,'error');
+  });
+}
+
+/** 處理 writeNASFile 相關操作。 */
+async function writeNASFile(handle){
+  const bytes=db.export();
+  const writable=await handle.createWritable();
+  await writable.write(bytes);
+  await writable.close();
+}
+
+/** 處理 saveToNASAuto 相關操作。 */
+async function saveToNASAuto(){
+  await autoSaveWithBackup();
+}
+
+/** 處理 importDB 相關操作。 */
+function importDB(file){
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      db=new SQL.Database(new Uint8Array(e.target.result));
+      toast('資料庫已載入 ✓','success');
+      go(cur);refreshBadges();
+      const el=document.getElementById('nas-status');
+      if(el){el.textContent='📂 已載入：'+file.name+'　如需存回 NAS 請點「存檔到 NAS」';el.style.color='var(--accent3)';}
+    }catch(e){toast('載入失敗','error');}
+  };
+  r.readAsArrayBuffer(file);
+}
+
+/** 處理 openFromNAS 相關操作。 */
+function openFromNAS(){
+  if(typeof showOpenFilePicker==='undefined'){
+    document.querySelector('input[accept=".db"]')?.click();
+    return;
+  }
+  showOpenFilePicker({
+    types:[{description:'SQLite Database',accept:{'application/octet-stream':['.db']}}],
+  }).then(([handle])=>{
+    window._nasFileHandle=handle;
+    return handle.getFile();
+  }).then(file=>{
+    importDB(file);
+    const el=document.getElementById('nas-status');
+    if(el){el.textContent='✅ 已連結 NAS 檔案：'+window._nasFileHandle?.name+'　存檔時將直接寫回';el.style.color='var(--accent2)';}
+  }).catch(e=>{if(e.name!=='AbortError')toast('開啟失敗：'+e.message,'error');});
+}
+
+/** 處理 copyPath 相關操作。 */
+function copyPath(path){
+  navigator.clipboard.writeText(path).then(()=>toast('路徑已複製，請貼到檔案總管網址列 ✓','success')).catch(()=>{
+    // Fallback for older browsers
+    const ta=document.createElement('textarea');
+    ta.value=path;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    toast('路徑已複製 ✓','success');
+  });
+}
+
+/** 處理 seedData 相關操作。 */
+function seedData(){
+  const d=(n=0)=>{const dt=new Date();dt.setDate(dt.getDate()+n);return dt.toISOString().split('T')[0];};
+  exec("INSERT INTO customers(name,phone,email,address,notes) VALUES('台灣精機股份有限公司','02-2345-6789','eng@twcnc.com','台北市內湖區','CNC零件設計圖'),('明洋工業有限公司','04-2234-5678','buy@mingyang.com','台中市工業區','客製化鈑金'),('綠能科技','03-5566-7788','rd@green.com','新竹市','PCB設計'),('捷鑄模具','06-2345-6789','mold@jetcast.com','台南市','模具開發'),('晶順電子','07-3344-5566','po@cs-elec.com','高雄市','電子組裝')");
+  exec("INSERT INTO suppliers(name,phone,email,contact,specialty,notes) VALUES('廣達精密加工','04-2233-4455','cnc@guangda.com','陳師傅','CNC車床','最快交期3天'),('鴻源鈑金','02-7788-9900','sheet@hongyuan.com','林業務','鈑金成形','最小100件'),('台中3D列印','04-3344-5566','print@tc3d.com','王工','SLA/FDM',''),('科技PCB','03-4455-6677','pcb@techpcb.com','陳業務','PCB製作',''),('智能設計','02-5566-7788','design@smart.com','李工','CAD/機構','可NDA')");
+  exec("INSERT INTO services(name,category,unit,default_price,notes) VALUES('機械零件設計圖（2D）','設計','張',8000,'含DWG'),('機械零件設計圖（3D）','設計','件',15000,'含STEP'),('模具設計','設計','套',45000,''),('電路板設計（PCB）','設計','層',20000,'雙層起'),('設計修改','設計','小時',1500,'按工時計'),('CNC加工件','加工','件',5000,'依複雜度'),('鈑金加工','加工','件',3000,'含折彎'),('3D列印樣品','加工','件',2000,'含後處理'),('顧問服務','顧問','小時',2500,''),('規格書撰寫','文件','份',8000,'')");
+
+  // Quote → accepted (with history)
+  exec("INSERT INTO quotes(quote_no,customer_id,title,date,valid_until,status,version,total_excl,tax_rate,tax_amount,total) VALUES('QT-2026001',1,'鋁合金支架設計報價','"+d(-35)+"','"+d(-5)+"','accepted',1,47619,5,2381,50000)");
+  const qid=lastId();
+  exec("INSERT INTO quote_items(quote_id,description,qty,unit,unit_price) VALUES(?,?,?,?,?)",[qid,'機械零件設計圖（2D）',2,'張',15000]);
+  exec("INSERT INTO quote_items(quote_id,description,qty,unit,unit_price) VALUES(?,?,?,?,?)",[qid,'規格書撰寫',1,'份',8000]);
+  // Seed a revision (v2) of QT-2026001
+  exec("INSERT INTO quotes(quote_no,customer_id,title,date,valid_until,status,version,parent_quote_id,total_excl,tax_rate,tax_amount,total) VALUES('QT-2026001-v2',1,'鋁合金支架設計報價（含 3D 加購）','"+d(-28)+"','"+d(-3)+"','accepted',2,"+qid+",61905,5,3095,65000)");
+  const qid2=lastId();
+  exec("INSERT INTO quote_items(quote_id,description,qty,unit,unit_price) VALUES(?,?,?,?,?)",[qid2,'機械零件設計圖（2D）',2,'張',15000]);
+  exec("INSERT INTO quote_items(quote_id,description,qty,unit,unit_price) VALUES(?,?,?,?,?)",[qid2,'機械零件設計圖（3D）',1,'件',15000]);
+  exec("INSERT INTO quote_items(quote_id,description,qty,unit,unit_price) VALUES(?,?,?,?,?)",[qid2,'規格書撰寫',1,'份',8000]);
+  // Draft sent quote
+  exec("INSERT INTO quotes(quote_no,customer_id,title,date,valid_until,status,version,total_excl,tax_rate,tax_amount,total) VALUES('QT-2026002',3,'馬達驅動板 PCB 設計報價','"+d(-3)+"','"+d(27)+"','sent',1,38095,5,1905,40000)");
+
+  // Orders
+  const orders=[
+    {title:'鋁合金支架設計圖',cid:1,qid:qid2,date:d(-30),due:d(5),phase:'delivering',excl:61905,tax:3095,tot:65000,delivs:[{text:'2D圖(DWG)',done:true},{text:'3D模型(STEP)',done:true},{text:'規格書(PDF)',done:false}],ms:[{n:'訂金 30%',a:19500,d:d(-28)},{n:'尾款 70%',a:45500,d:d(10)}],msPaid:[true,false]},
+    {title:'控制箱鈑金外殼',cid:2,qid:null,date:d(-15),due:d(15),phase:'outsourcing',excl:28571,tax:1429,tot:30000,delivs:[{text:'鈑金圖(DWG)',done:true},{text:'加工件',done:false}],ms:[{n:'全額付款',a:30000,d:d(15)}],msPaid:[false]},
+    {title:'精密模具開發',cid:4,qid:null,date:d(-45),due:d(-5),phase:'completed',excl:85714,tax:4286,tot:90000,delivs:[],ms:[{n:'訂金 30%',a:27000,d:d(-40)},{n:'完工款 70%',a:63000,d:d(-6)}],msPaid:[true,true]},
+    {title:'自動化結構顧問',cid:5,qid:null,date:d(-10),due:d(20),phase:'reviewing',excl:23810,tax:1190,tot:25000,delivs:[{text:'顧問報告',done:true}],ms:[{n:'全額付款',a:25000,d:d(20)}],msPaid:[false]},
+  ];
+  orders.forEach(o=>{
+    exec("INSERT INTO orders(order_no,quote_id,customer_id,title,date,due_date,phase,status,total_excl,tax_rate,tax_amount,total,deliverables) VALUES(?,?,?,?,?,?,?,?,?,5,?,?,?)",
+      [nextNo('PRJ','orders'),o.qid||null,o.cid,o.title,o.date,o.due,o.phase,(o.phase==='completed'?'completed':'active'),o.excl,o.tax,o.tot,JSON.stringify(o.delivs)]);
+    const oid=lastId();
+    o.ms.forEach((m,i)=>{
+      exec("INSERT INTO receivables(order_id,milestone_name,amount,due_date,status,paid_date) VALUES(?,?,?,?,?,?)",
+        [oid,m.n,m.a,m.d,o.msPaid[i]?'paid':'unpaid',o.msPaid[i]?o.date:null]);
+    });
+  });
+
+  // Link converted_order_id and seed quote history
+  const prj1=q1("SELECT id FROM orders WHERE title='鋁合金支架設計圖'")?.id;
+  if(prj1){
+    exec("UPDATE quotes SET converted_order_id=?,converted_at=datetime('now','localtime') WHERE id=?",[prj1,qid2]);
+    logQuoteHistory(qid,'created','建立草稿');
+    logQuoteHistory(qid,'sent','發送給客戶');
+    logQuoteHistory(qid,'revised','客戶要求加購 3D 模型，建立 v2 修訂版');
+    logQuoteHistory(qid2,'created','修訂版本建立（繼承自 QT-2026001）');
+    logQuoteHistory(qid2,'sent','發送修訂版給客戶');
+    logQuoteHistory(qid2,'accepted','客戶接受報價');
+    logQuoteHistory(qid2,'converted','轉為專案訂單 '+q1("SELECT order_no FROM orders WHERE id=?",[prj1])?.order_no);
+  }
+  const qt2=q1("SELECT id FROM quotes WHERE quote_no='QT-2026002'")?.id;
+  if(qt2){
+    logQuoteHistory(qt2,'created','建立草稿');
+    logQuoteHistory(qt2,'sent','發送給客戶，等待回覆');
+  }
+
+  // Outsource orders
+  const os1=q1("SELECT id FROM orders WHERE title='控制箱鈑金外殼'")?.id;
+  const os2=q1("SELECT id FROM orders WHERE title='鋁合金支架設計圖'")?.id;
+  if(os1){exec("INSERT INTO outsource_orders(os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description) VALUES(?,?,?,?,?,'confirmed',9524,5,476,10000,'鈑金折彎加工')",[nextNo('OS','outsource_orders'),os1,2,d(-12),d(10)]);const osid=lastId();exec("INSERT OR IGNORE INTO payables(os_id,amount,due_date,status) VALUES(?,?,?,'unpaid')",[osid,10000,addDays(d(10),30)]);}
+  if(os2){exec("INSERT INTO outsource_orders(os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description) VALUES(?,?,?,?,?,'pending',14286,5,714,15000,'設計外包協助')",[nextNo('OS','outsource_orders'),os2,5,d(-5),d(15)]);const osid=lastId();exec("INSERT OR IGNORE INTO payables(os_id,amount,due_date,status) VALUES(?,?,?,'unpaid')",[osid,15000,addDays(d(15),30)]);}
+}
+
+/** 處理 init 相關操作。 */
+async function init(){
+  try{
+    SQL=await initSqlJs({locateFile:f=>'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/'+f});
+    db=new SQL.Database();
+    db.run(SCHEMA);
+    // Migration for old DBs
+    ['quotes','quote_items'].forEach(t=>{
+      try{db.run(`CREATE TABLE IF NOT EXISTS ${t}(id INTEGER PRIMARY KEY AUTOINCREMENT)`);}catch(e){}
+    });
+    // New migrations
+    const migrations=[
+      "ALTER TABLE receivables ADD COLUMN milestone_name TEXT DEFAULT '全額付款'",
+      "ALTER TABLE orders ADD COLUMN quote_id INTEGER",
+      "ALTER TABLE quotes ADD COLUMN deleted_at TEXT DEFAULT NULL",
+      "ALTER TABLE quote_items ADD COLUMN is_subitem INTEGER DEFAULT 0",
+      "ALTER TABLE order_items ADD COLUMN is_subitem INTEGER DEFAULT 0",
+      "ALTER TABLE quotes ADD COLUMN parent_quote_id INTEGER",
+      "ALTER TABLE quotes ADD COLUMN converted_order_id INTEGER",
+      "ALTER TABLE quotes ADD COLUMN converted_at TEXT",
+      `CREATE TABLE IF NOT EXISTS quote_history(id INTEGER PRIMARY KEY AUTOINCREMENT,quote_id INTEGER,action TEXT NOT NULL,note TEXT,created_at TEXT DEFAULT(datetime('now','localtime')),FOREIGN KEY(quote_id)REFERENCES quotes(id))`,
+      "ALTER TABLE orders ADD COLUMN deleted_at TEXT DEFAULT NULL",
+      "ALTER TABLE outsource_orders ADD COLUMN deleted_at TEXT DEFAULT NULL",
+      "ALTER TABLE outsource_orders ADD COLUMN quote_file_url TEXT",
+      "ALTER TABLE outsource_orders ADD COLUMN rfq_id INTEGER",
+      `CREATE TABLE IF NOT EXISTS rfqs(id INTEGER PRIMARY KEY AUTOINCREMENT,rfq_no TEXT UNIQUE,order_id INTEGER,description TEXT,specs TEXT,date TEXT,deadline TEXT,status TEXT DEFAULT 'open',notes TEXT,deleted_at TEXT DEFAULT NULL,FOREIGN KEY(order_id)REFERENCES orders(id))`,
+      `CREATE TABLE IF NOT EXISTS rfq_suppliers(id INTEGER PRIMARY KEY AUTOINCREMENT,rfq_id INTEGER,supplier_id INTEGER,FOREIGN KEY(rfq_id)REFERENCES rfqs(id),FOREIGN KEY(supplier_id)REFERENCES suppliers(id))`,
+      `CREATE TABLE IF NOT EXISTS supplier_quotes(id INTEGER PRIMARY KEY AUTOINCREMENT,rfq_id INTEGER,supplier_id INTEGER,received_date TEXT,total_excl REAL DEFAULT 0,tax_rate REAL DEFAULT 5,tax_amount REAL DEFAULT 0,total REAL DEFAULT 0,lead_time_days INTEGER,file_url TEXT,notes TEXT,selected INTEGER DEFAULT 0,FOREIGN KEY(rfq_id)REFERENCES rfqs(id),FOREIGN KEY(supplier_id)REFERENCES suppliers(id))`,
+      `CREATE TABLE IF NOT EXISTS activity_log(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,action TEXT NOT NULL,ref_id INTEGER,ref_no TEXT,ref_title TEXT,amount REAL,entity TEXT,note TEXT,created_at TEXT DEFAULT(datetime('now','localtime')))`,
+      `CREATE TABLE IF NOT EXISTS phase_log(id INTEGER PRIMARY KEY AUTOINCREMENT,order_id INTEGER,phase TEXT NOT NULL,entered_at TEXT DEFAULT(datetime('now','localtime')),note TEXT,FOREIGN KEY(order_id)REFERENCES orders(id))`,
+      "ALTER TABLE quotes ADD COLUMN version INTEGER DEFAULT 1",
+      "ALTER TABLE quotes ADD COLUMN superseded_note TEXT",
+      "ALTER TABLE customers ADD COLUMN contact_person TEXT",
+      "ALTER TABLE customers ADD COLUMN job_title TEXT",
+      "ALTER TABLE customers ADD COLUMN tax_id TEXT",
+      "ALTER TABLE suppliers ADD COLUMN tax_id TEXT",
+    ];
+    migrations.forEach(sql=>{try{db.run(sql);}catch(e){}});
+    const check=q1("SELECT COUNT(*) as c FROM customers");
+    if(!check||check.c===0)seedData();
+    applyUserSettings();
+    initTheme();
+    document.getElementById('loading').classList.remove('show');
+    go('dashboard');
+  }catch(e){document.querySelector('.loading-text').textContent='載入失敗：'+e.message;}
+}
+
+init();
