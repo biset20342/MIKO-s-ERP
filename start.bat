@@ -1,12 +1,12 @@
 @echo off
-echo.
-echo  ╔══════════════════════════════════════╗
-echo  ║     ProjectERP — Node.js 版          ║
-echo  ╚══════════════════════════════════════╝
-echo.
-echo  正在啟動伺服器...
-echo  請稍候，瀏覽器將自動開啟
-echo.
+if "%~1"=="hidden" goto :run
+
+set "VBS_PATH=%temp%\hide_erp.vbs"
+echo Set WshShell = WScript.CreateObject("WScript.Shell") > "%VBS_PATH%"
+echo WshShell.Run """" ^& WScript.Arguments(0) ^& """ hidden", 0, False >> "%VBS_PATH%"
+wscript "%VBS_PATH%" "%~dpnx0"
+exit
+
+:run
 start "" "http://localhost:3000"
 node server.js
-pause

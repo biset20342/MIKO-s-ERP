@@ -205,10 +205,12 @@ function renderSettings(){
   // ─── Panel 5: 危險操作 ───
   const p5=
     '<div style="padding:12px 14px;background:rgba(247,110,110,.05);border:1px solid rgba(247,110,110,.2);border-radius:8px;margin-bottom:16px;font-size:12.5px;color:var(--accent4)">'+
-    '⚠️ 以下操作不可還原，請確認後再執行'+
+    '⚠️ 以下操作不可還原或將影響系統運作，請確認後再執行'+
     '</div>'+
     '<div class="danger-zone">'+
-    '<div class="danger-title">DANGER ZONE</div>'+
+    '<div class="danger-title">SERVER MANAGEMENT</div>'+
+    '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">關閉伺服器 (Shutdown Server)</div><div class="danger-action-desc">安全地關閉在背景運作的 ERP 程式。下次需重新執行 start.bat 才能使用。</div></div><button class="btn btn-warning" onclick="shutdownServer()">關閉伺服器</button></div>'+
+    '<div class="danger-title" style="margin-top:20px;border-top:1px solid rgba(247,110,110,.2);padding-top:20px">DANGER ZONE</div>'+
     '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">刪除所有資料，讓系統完全為空</div><div class="danger-action-desc">清除所有交易明細、基本資料及系統設定。重啟伺服器後不會出現範本資料。</div></div><button class="btn btn-danger" onclick="confirmWipeEverything()">完全清空系統</button></div>'+
     '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">刪除所有資料，但保留設定</div><div class="danger-action-desc">刪除所有業務資料及基本資料，系統設定（公司資訊、預設值）將不受影響。</div></div><button class="btn btn-danger" onclick="confirmClearAll()">刪除並保留設定</button></div>'+
     '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">回復到原廠保留範例資料的狀態</div><div class="danger-action-desc">刪除所有資料與設定，然後立刻重新載入系統範例資料。</div></div><button class="btn btn-danger" onclick="confirmFullReset()">還原原廠範例</button></div>'+
@@ -288,4 +290,12 @@ function applyTheme(theme){
   if(pickerContainer){
     pickerContainer.outerHTML=renderThemePickerHTML(theme||'default');
   }
+}
+
+/** 透過網頁關閉背景伺服器 */
+function shutdownServer() {
+  confirmDialog('確定要關閉 ERP 伺服器嗎？<br><br>關閉後您將無法使用系統，直到您再次點擊桌面的 ProjectERP 捷徑重新啟動它。', () => {
+    fetch('/api/shutdown', { method: 'POST' });
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;font-family:sans-serif;background:var(--bg);color:var(--text)"><div style="font-size:40px;margin-bottom:20px">🔌</div><div style="font-size:22px;margin-bottom:8px">伺服器已離線</div><div style="font-size:14px;color:var(--text3)">您可以安全關閉本瀏覽器視窗。<br><br>若要重新使用，請再次執行桌面的 ProjectERP 捷徑。</div></div>';
+  });
 }

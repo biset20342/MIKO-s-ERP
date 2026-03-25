@@ -260,12 +260,32 @@ app.post('/api/import', (req, res) => {
   }
 });
 
+/**
+ * POST /api/shutdown
+ * 安全關閉在背景運行的伺服器
+ */
+app.post('/api/shutdown', (req, res) => {
+  console.log('收到關閉要求，伺服器將於 1 秒後關閉...');
+  res.json({ message: 'Shutting down...' });
+  setTimeout(() => process.exit(0), 1000);
+});
+
 // ─────────────────────────────────────────────
 // 啟動
 // ─────────────────────────────────────────────
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n🚀 ProjectERP Server 已啟動`);
   console.log(`   ➜  http://localhost:${PORT}`);
   console.log(`   📁 資料庫：${DB_PATH}`);
-  console.log(`   按 Ctrl+C 停止\n`);
+  console.log(`   (伺服器已於背景執行。若要關閉，請透過網頁設定介面 或是 Stop_ERP.bat)\n`);
+});
+
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    // 伺服器已經在背景運行了，靜默結束，讓 start.bat 單純開啟瀏覽器即可
+    console.log(`⚠️ 提示：伺服器已經在背景運行中。`);
+    process.exit(0);
+  } else {
+    console.error('啟動發生錯誤:', e);
+  }
 });
