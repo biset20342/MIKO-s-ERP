@@ -5,7 +5,9 @@
  */
 
 /** 處理 openModal 相關操作。 */
-function openModal(title,html,saveFn){
+function openModal(title,html,saveFn,preventClose=false){
+  const ov=document.getElementById('overlay');
+  if(preventClose) ov.dataset.preventClose="1"; else delete ov.dataset.preventClose;
   document.getElementById('modal-title').textContent=title;
   document.getElementById('modal-body').innerHTML=html;
   const btn=document.getElementById('modal-save');

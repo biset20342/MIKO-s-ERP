@@ -30,7 +30,7 @@
     <div class="nav-item" data-sec="outsource" onclick="go('outsource')"><span class="icon">🏭</span>採購單<span class="nav-badge" id="badge-os" style="background:var(--accent3)">0</span></div>
     <div class="nav-section">財務</div>
     <div class="nav-item" data-sec="receivables" onclick="go('receivables')"><span class="icon">📥</span>應收帳款<span class="nav-badge" id="badge-ar">0</span></div>
-    <div class="nav-item" data-sec="payables" onclick="go('payables')"><span class="icon">📤</span>應付帳款</div>
+    <div class="nav-item" data-sec="payables" onclick="go('payables')"><span class="icon">📤</span>應付帳款<span class="nav-badge" id="badge-ap">0</span></div>
     <div class="nav-section">基本資料</div>
     <div class="nav-item" data-sec="customers" onclick="go('customers')"><span class="icon">👥</span>客戶</div>
     <div class="nav-item" data-sec="suppliers" onclick="go('suppliers')"><span class="icon">🏢</span>合作廠商</div>
@@ -61,7 +61,7 @@
   <div id="content"></div>
 </div>
 
-<div id="overlay" onclick="closeModal()">
+<div id="overlay" onclick="if(!this.dataset.preventClose) closeModal()">
   <div id="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <div class="modal-title" id="modal-title">—</div>

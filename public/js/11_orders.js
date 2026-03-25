@@ -17,7 +17,7 @@ function renderOrders(){
     </select>
     <span class="filter-count" id="ord-count">${rows.length} 筆</span>
   </div>
-  <table><thead><tr>${sth('orders','order_no','專案號')}${sth('orders','title','標題')}${sth('orders','cn','客戶')}${sth('orders','due_date','截止日')}${sth('orders','total','含稅金額')}<th>已收/應收</th><th>階段</th><th>操作</th></tr></thead>
+  <table><thead><tr>${sth('orders','order_no','專案號')}${sth('orders','title','標題')}${sth('orders','cn','客戶')}${sth('orders','date','建立日期')}${sth('orders','due_date','截止日')}${sth('orders','total','含稅金額')}<th>已收/應收</th><th>階段</th><th>操作</th></tr></thead>
   <tbody id="ord-tbody">${renderOrdRows(rows)}</tbody></table></div>`;
 }
 
@@ -32,6 +32,7 @@ function renderOrdRows(rows){
     <td class="td-mono td-main">${o.order_no}</td>
     <td class="td-main" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.title||'—'}</td>
     <td>${o.cn||'—'}</td>
+    <td class="td-mono">${o.date||'—'}</td>
     <td class="td-mono"${over?' style="color:var(--accent4)"':''}>${o.due_date||'—'}</td>
     <td class="td-mono">$${fmt(o.total)}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><div style="width:40px;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden"><div style="width:${paidPct}%;height:100%;background:var(--accent2)"></div></div><span class="td-mono" style="font-size:11px;color:var(--accent2)">${paidPct}%</span></div></td>
@@ -194,7 +195,7 @@ function showEditOrder(id){
       exec("DELETE FROM order_items WHERE order_id=?",[id]);
       items2.forEach(i=>{const svc=_svcs.find(s=>s.name===i.desc);exec("INSERT INTO order_items(order_id,service_id,description,qty,unit,unit_price,is_subitem) VALUES(?,?,?,?,?,?,?)",[id,svc?.id||null,i.desc,i.qty,i.unit,i.price,i.isSub?1:0]);});
       toast('訂單已更新','success');closeModal();go(cur);
-    });
+    },true);
   setTimeout(recalc,50);
 }
 
@@ -229,7 +230,7 @@ function showAddOrder(){
     <div id="deliv-inputs"></div>
     <button class="add-row-btn" onclick="addDelivRow()">＋ 新增交付物</button>
     <div class="form-row" style="margin-top:10px"><label>備註</label><textarea id="f-notes" placeholder="特殊需求、溝通紀錄..."></textarea></div>`,
-    saveOrder);
+    saveOrder,true);
   addOrderItemRow();
 }
 

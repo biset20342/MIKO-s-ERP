@@ -58,9 +58,11 @@ function renderTrash(){
 
 /** 處理 permanentDelete 相關操作。 */
 function permanentDelete(table,id,label){
-  openDangerModal('永久刪除「'+label+'」',
-    '此操作將從資料庫中<strong>永久移除</strong>此筆資料，無法還原。',
-    'PERM-DELETE',
-    ()=>{exec('DELETE FROM '+table+' WHERE id=?',[id]);toast('已永久刪除','success');go(cur);}
+  confirmDialog(`確定要永久刪除「${label}」嗎？\n此操作將從資料庫中永久移除此筆資料，無法還原。`,
+    ()=>{
+      const stmts = getCascadingDeletes(table, id);
+      execBatch(stmts);
+      toast('已永久刪除','success');go(cur);
+    }
   );
 }

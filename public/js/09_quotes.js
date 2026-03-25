@@ -134,7 +134,7 @@ function showQuoteDetail(id){
 function showAddQuote(){
   _custs=q("SELECT id,name FROM customers ORDER BY name");
   _svcs=q("SELECT id,name,unit,default_price,category FROM services ORDER BY category,name");
-  openModal('新增報價單',quoteForm(),saveQuote);
+  openModal('新增報價單',quoteForm(),saveQuote,true);
   addQItemRow();
 }
 
@@ -210,7 +210,7 @@ function showEditQuote(id){
     items2.forEach(i=>{const svc=_svcs.find(s=>s.name===i.desc);exec("INSERT INTO quote_items(quote_id,service_id,description,qty,unit,unit_price,is_subitem) VALUES(?,?,?,?,?,?,?)",[id,svc?.id||null,i.desc,i.qty,i.unit,i.price,i.isSub?1:0]);});
     logQuoteHistory(id,'edited','編輯報價內容');
     toast('報價單已更新','success');closeModal();go(cur);
-  });
+  },true);
   setTimeout(recalc,50);
 }
 

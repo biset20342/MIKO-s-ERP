@@ -210,6 +210,29 @@ app.post('/api/exec', (req, res) => {
 });
 
 /**
+ * POST /api/exec-batch
+ * 執行多筆 SQL，包裝於單一 Transaction 確保一致性
+ * Body: { statements: [{sql, params}, ...] }
+ */
+app.post('/api/exec-batch', (req, res) => {
+  try {
+    const { statements = [] } = req.body;
+    const runMany = db.transaction((stmts) => {
+      let changes = 0;
+      for (const st of stmts) {
+        changes += db.prepare(st.sql).run(...(st.params || [])).changes;
+      }
+      return changes;
+    });
+    const changes = runMany(statements);
+    res.json({ changes });
+  } catch (e) {
+    console.error('[API/exec-batch]', e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+/**
  * GET /api/export
  * 下載目前的 .db 檔案作為備份
  */

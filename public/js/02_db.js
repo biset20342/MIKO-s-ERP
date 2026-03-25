@@ -72,6 +72,17 @@ function exec(sql, p = []) {
   }).catch(e => console.error('[exec]', e, sql));
 }
 
+function execBatch(statements) {
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/exec-batch', false); // 同步執行以確保後續的重新渲染能抓到新資料
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.send(JSON.stringify({ statements }));
+    if (xhr.status !== 200) { console.error('[execBatch] HTTP', xhr.status); return false; }
+    return true;
+  } catch (e) { console.error('[execBatch]', e); return false; }
+}
+
 function lastId() {
   // 同步查詢最後插入的 rowid
   return q1('SELECT last_insert_rowid() as id')?.id || 0;

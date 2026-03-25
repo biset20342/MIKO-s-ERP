@@ -205,12 +205,50 @@ function exportDB(){
   toast('備份下載已開始 ✓','success');
 }
 
+/** 取得所有串聯刪除語句 */
+function getCascadingDeletes(table, id) {
+  let stmts = [];
+  if (table === 'orders') {
+    stmts.push({ sql: `DELETE FROM receivables WHERE order_id=?`, params: [id] });
+    stmts.push({ sql: `DELETE FROM order_items WHERE order_id=?`, params: [id] });
+    stmts.push({ sql: `DELETE FROM order_notes WHERE order_id=?`, params: [id] });
+    stmts.push({ sql: `DELETE FROM phase_log WHERE order_id=?`, params: [id] });
+    const osIds = q(`SELECT id FROM outsource_orders WHERE order_id=?`, [id]).map(r=>r.id);
+    osIds.forEach(osId => {
+      stmts.push({ sql: `DELETE FROM payables WHERE os_id=?`, params: [osId] });
+      stmts.push({ sql: `DELETE FROM os_items WHERE os_id=?`, params: [osId] });
+      stmts.push({ sql: `DELETE FROM outsource_orders WHERE id=?`, params: [osId] });
+    });
+    const rfqIds = q(`SELECT id FROM rfqs WHERE order_id=?`, [id]).map(r=>r.id);
+    rfqIds.forEach(rfqId => {
+      stmts.push({ sql: `DELETE FROM supplier_quotes WHERE rfq_id=?`, params: [rfqId] });
+      stmts.push({ sql: `DELETE FROM rfq_suppliers WHERE rfq_id=?`, params: [rfqId] });
+      stmts.push({ sql: `DELETE FROM rfqs WHERE id=?`, params: [rfqId] });
+    });
+    stmts.push({ sql: `DELETE FROM orders WHERE id=?`, params: [id] });
+  } else if (table === 'quotes') {
+    stmts.push({ sql: `DELETE FROM quote_items WHERE quote_id=?`, params: [id] });
+    stmts.push({ sql: `DELETE FROM quote_history WHERE quote_id=?`, params: [id] });
+    stmts.push({ sql: `DELETE FROM quotes WHERE id=?`, params: [id] });
+  } else if (table === 'outsource_orders') {
+    stmts.push({ sql: `DELETE FROM payables WHERE os_id=?`, params: [id] });
+    stmts.push({ sql: `DELETE FROM os_items WHERE os_id=?`, params: [id] });
+    stmts.push({ sql: `DELETE FROM outsource_orders WHERE id=?`, params: [id] });
+  }
+  return stmts;
+}
+
 /** 處理 emptyTrash 相關操作。 */
 function emptyTrash(){
   confirmDialog('確定要清空整個回收桶嗎？所有資料將永久消失，無法還原。',()=>{
-    ['quotes','orders','outsource_orders'].forEach(t=>{
-      exec('DELETE FROM '+t+' WHERE deleted_at IS NOT NULL');
+    let stmts = [];
+    ['quotes','orders','outsource_orders'].forEach(table => {
+      const ids = q(`SELECT id FROM ${table} WHERE deleted_at IS NOT NULL`).map(r=>r.id);
+      ids.forEach(id => {
+        stmts = stmts.concat(getCascadingDeletes(table, id));
+      });
     });
+    if (stmts.length > 0) execBatch(stmts);
     toast('回收桶已清空','success');go(cur);
   });
 }
@@ -292,6 +330,14 @@ function applyUserSettings(){
   if(previewEl)previewEl.textContent=(name||'王')[0];
 }
 
+const DB_CLEAR_ORDER = [
+  'activity_log', 'phase_log', 'quote_history', 'quote_items', 
+  'order_notes', 'order_items', 'receivables', 'payables', 'os_items',
+  'supplier_quotes', 'rfq_suppliers', 'rfqs',
+  'outsource_orders', 'orders', 'quotes', 
+  'services', 'suppliers', 'customers'
+];
+
 /** 處理 confirmWipeEverything 相關操作。 */
 function confirmWipeEverything(){
   openDangerModal(
@@ -299,8 +345,7 @@ function confirmWipeEverything(){
     '此操作將刪除資料庫中<strong>所有</strong>交易明細、基本資料，以及系統設定。<br><br>系統將徹底清空，且重啟伺服器後不會重建範本資料。<br>所有真實資料將永久消失，無法還原。',
     'WIPE-ALL',
     ()=>{
-      const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders','services','suppliers','customers','settings'];
-      tables.forEach(t=>exec(`DELETE FROM ${t}`));
+      execBatch([...DB_CLEAR_ORDER, 'settings'].map(t=>({sql:`DELETE FROM ${t}`})));
       setSetting('wiped', '1');
       applyUserSettings();
       toast('系統已完全清空','success');closeModal();go('settings');
@@ -315,8 +360,7 @@ function confirmClearAll(){
     '此操作將刪除資料庫中<strong>所有</strong>交易記錄與基本資料。系統設定（公司資訊、預設值）將保留不受影響。<br><br>建議執行前先匯出 DB 備份。',
     'CLEAR-DATA',
     ()=>{
-      const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders','services','suppliers','customers'];
-      tables.forEach(t=>exec(`DELETE FROM ${t}`));
+      execBatch(DB_CLEAR_ORDER.map(t=>({sql:`DELETE FROM ${t}`})));
       toast('所有業務與基本資料已清除，設定已保留','success');closeModal();go('settings');
     }
   );
@@ -329,8 +373,7 @@ function confirmFullReset(){
     '此操作將清除<strong>所有資料與設定</strong>，然後重新載入系統範例資料。等同於全新安裝。<br><br>所有真實資料將永久消失，無法還原。',
     'FULL-RESET',
     ()=>{
-      const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders','services','suppliers','customers','settings'];
-      tables.forEach(t=>exec(`DELETE FROM ${t}`));
+      execBatch([...DB_CLEAR_ORDER, 'settings'].map(t=>({sql:`DELETE FROM ${t}`})));
       seedData();
       toast('系統已完整重置，範例資料已重新載入','success');closeModal();go('dashboard');
     }

@@ -9,17 +9,23 @@ function refreshBadges(){
   const qt=q1("SELECT COUNT(*) as c FROM quotes WHERE status IN('draft','sent') AND deleted_at IS NULL")?.c||0;
   const ac=q1("SELECT COUNT(*) as c FROM orders WHERE status='active' AND phase NOT IN('completed','cancelled') AND deleted_at IS NULL")?.c||0;
   const os=q1("SELECT COUNT(*) as c FROM outsource_orders WHERE status='pending' AND deleted_at IS NULL")?.c||0;
-  const ar=q1("SELECT COUNT(*) as c FROM receivables WHERE status='unpaid' AND due_date<date('now')")?.c||0;
+  const ar=q1("SELECT COUNT(r.id) as c FROM receivables r JOIN orders o ON r.order_id=o.id WHERE r.status='unpaid' AND o.deleted_at IS NULL")?.c||0;
+  const arOver=q1("SELECT COUNT(r.id) as c FROM receivables r JOIN orders o ON r.order_id=o.id WHERE r.status='unpaid' AND r.due_date<date('now','localtime') AND o.deleted_at IS NULL")?.c||0;
+  const ap=q1("SELECT COUNT(p.id) as c FROM payables p JOIN outsource_orders os ON p.os_id=os.id WHERE p.status='unpaid' AND os.deleted_at IS NULL")?.c||0;
+  const apOver=q1("SELECT COUNT(p.id) as c FROM payables p JOIN outsource_orders os ON p.os_id=os.id WHERE p.status='unpaid' AND p.due_date<date('now','localtime') AND os.deleted_at IS NULL")?.c||0;
   const tr=(q1("SELECT COUNT(*) as c FROM quotes WHERE deleted_at IS NOT NULL")?.c||0)+(q1("SELECT COUNT(*) as c FROM orders WHERE deleted_at IS NOT NULL")?.c||0)+(q1("SELECT COUNT(*) as c FROM outsource_orders WHERE deleted_at IS NOT NULL")?.c||0);
   document.getElementById('badge-qt').textContent=qt;
   document.getElementById('badge-orders').textContent=ac;
   document.getElementById('badge-os').textContent=os;
   document.getElementById('badge-ar').textContent=ar;
-  document.getElementById('badge-ar').style.background=ar>0?'var(--accent4)':'var(--text3)';
+  document.getElementById('badge-ar').style.background=arOver>0?'var(--accent4)':(ar>0?'var(--accent2)':'var(--text3)');
   document.getElementById('badge-os').style.background=os>0?'var(--accent3)':'var(--text3)';
   const rfqC=q1("SELECT COUNT(*) as c FROM rfqs WHERE status='open' AND deleted_at IS NULL")?.c||0;
   const rfqEl=document.getElementById('badge-rfq');
   if(rfqEl){rfqEl.textContent=rfqC;rfqEl.style.background=rfqC>0?'var(--accent)':'var(--text3)';}
+  
+  const apEl=document.getElementById('badge-ap');
+  if(apEl){apEl.textContent=ap;apEl.style.background=apOver>0?'var(--accent4)':(ap>0?'var(--accent3)':'var(--text3)');}
 
   const tb=document.getElementById('badge-trash');
   if(tb){tb.textContent=tr;tb.style.background=tr>0?'var(--accent3)':'var(--text3)';}
