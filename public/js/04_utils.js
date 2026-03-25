@@ -292,31 +292,18 @@ function applyUserSettings(){
   if(previewEl)previewEl.textContent=(name||'王')[0];
 }
 
-/** 處理 confirmClearTransactions 相關操作。 */
-function confirmClearTransactions(){
+/** 處理 confirmWipeEverything 相關操作。 */
+function confirmWipeEverything(){
   openDangerModal(
-    '清除所有交易資料',
-    '此操作將刪除：報價單、專案訂單、委外單、應收帳款、應付帳款及所有明細。<br><br>客戶、廠商、服務項目與系統設定<strong>不受影響</strong>。',
-    'CLEAR-DATA',
+    '刪除所有資料，讓系統完全為空',
+    '此操作將刪除資料庫中<strong>所有</strong>交易明細、基本資料，以及系統設定。<br><br>系統將徹底清空，且重啟伺服器後不會重建範本資料。<br>所有真實資料將永久消失，無法還原。',
+    'WIPE-ALL',
     ()=>{
-      const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders'];
+      const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders','services','suppliers','customers','settings'];
       tables.forEach(t=>exec(`DELETE FROM ${t}`));
-      toast('交易資料已全部清除','success');closeModal();go('settings');
-    }
-  );
-}
-
-/** 處理 confirmClearMasterData 相關操作。 */
-function confirmClearMasterData(){
-  openDangerModal(
-    '清除所有基本資料',
-    '此操作將刪除：客戶清單、合作廠商、服務項目。<br><br>現有訂單的客戶欄位將顯示為空白，但交易記錄本身<strong>不受影響</strong>。',
-    'CLEAR-MASTER',
-    ()=>{
-      exec("DELETE FROM services");
-      exec("DELETE FROM suppliers");
-      exec("DELETE FROM customers");
-      toast('基本資料已全部清除','success');closeModal();go('settings');
+      setSetting('wiped', '1');
+      applyUserSettings();
+      toast('系統已完全清空','success');closeModal();go('settings');
     }
   );
 }
@@ -324,27 +311,13 @@ function confirmClearMasterData(){
 /** 處理 confirmClearAll 相關操作。 */
 function confirmClearAll(){
   openDangerModal(
-    '清除所有資料',
-    '此操作將刪除資料庫中<strong>所有</strong>交易記錄與基本資料。系統設定（公司資訊、預設值）不受影響。<br><br>建議執行前先匯出 DB 備份。',
-    'CLEAR-ALL',
+    '刪除所有資料，但保留設定',
+    '此操作將刪除資料庫中<strong>所有</strong>交易記錄與基本資料。系統設定（公司資訊、預設值）將保留不受影響。<br><br>建議執行前先匯出 DB 備份。',
+    'CLEAR-DATA',
     ()=>{
       const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders','services','suppliers','customers'];
       tables.forEach(t=>exec(`DELETE FROM ${t}`));
-      toast('所有資料已清除','success');closeModal();go('settings');
-    }
-  );
-}
-
-/** 處理 confirmResetSettings 相關操作。 */
-function confirmResetSettings(){
-  openDangerModal(
-    '重置所有設定',
-    '此操作將清除公司資訊、使用者姓名職稱、所有預設值，恢復為系統預設狀態。<br><br>所有資料<strong>不受影響</strong>。',
-    'RESET-SETTINGS',
-    ()=>{
-      exec("DELETE FROM settings");
-      applyUserSettings();
-      toast('設定已重置為預設值','success');closeModal();go('settings');
+      toast('所有業務與基本資料已清除，設定已保留','success');closeModal();go('settings');
     }
   );
 }
@@ -352,8 +325,8 @@ function confirmResetSettings(){
 /** 處理 confirmFullReset 相關操作。 */
 function confirmFullReset(){
   openDangerModal(
-    '全部重置（清除所有資料＋設定＋重新載入範例）',
-    '此操作將清除<strong>所有資料與設定</strong>，然後重新載入範例資料。等同於全新安裝。<br><br>所有真實資料將永久消失，無法還原。',
+    '回復到原廠保留範例資料的狀態',
+    '此操作將清除<strong>所有資料與設定</strong>，然後重新載入系統範例資料。等同於全新安裝。<br><br>所有真實資料將永久消失，無法還原。',
     'FULL-RESET',
     ()=>{
       const tables=['activity_log','quote_items','quote_history','rfq_suppliers','supplier_quotes','rfqs','quotes','order_items','os_items','order_notes','receivables','payables','outsource_orders','orders','services','suppliers','customers','settings'];

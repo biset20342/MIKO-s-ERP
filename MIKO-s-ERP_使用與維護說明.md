@@ -124,7 +124,33 @@ app.post('/api/my-feature', (req, res) => {
 
 ---
 
-## 🚑 5. 常見問題排除
+## 📝 5. 資料庫寫入與 AI 擴充守則 (Database Write Rules)
+
+為了確保日後 AI 助手或開發者在擴充功能、新增欄位時，不會破壞現有資料庫架構或導致資料異常，**所有參與本專案的 AI 或開發人員必須嚴格遵守以下寫入規則**：
+
+### 1. 欄位擴充與 Migration (Schema 更新)
+- **永遠使用 `migrations` 加入新欄位**：不要手動透過 DB 軟體改結構。在 `server.js` 的 `const migrations = [...]` 陣列中新增 `ALTER TABLE 表名 ADD COLUMN 欄位名 型態 DEFAULT 預設值`。
+- **務必設定預設值 (DEFAULT)**：為了相容既有舊資料，新增欄位時請務必加上 `DEFAULT`（例如 `DEFAULT 0`、`DEFAULT ''` 或 `DEFAULT NULL`），以免讀取舊資料時發生例外錯誤。
+- **同步更新建表語法**：除了新增 migration，也要同步在 `server.js` 頂部的 `CREATE TABLE IF NOT EXISTS` 語句中加入新欄位，確保全新環境安裝時表結構完整。
+
+### 2. 前端寫入與 SQL 參數化 (防止注入與異常)
+- **絕不使用字串拼接**：在前端 `public/js/` 檔案中撰寫 `INSERT` 或 `UPDATE` 時，**必須**使用參數化查詢（`?`）。例如：`exec('UPDATE orders SET notes=? WHERE id=?', [notes, id])`。
+- **防止 `undefined` 寫入**：JSON 轉換時 `undefined` 會導致後端出錯或變成字串 `"undefined"`。準備 SQL 參數陣列時，必須將前端可能為空的變數轉化為明確的 `null`、`""` (空字串) 或數值零（例如 `qty || 0`）。
+- **明確指定欄位名稱**：撰寫 `INSERT` 語句時，嚴禁省略欄位名稱（如 `INSERT INTO table VALUES(...)`）。**必須**明確寫出 `INSERT INTO table (col1, col2) VALUES (?, ?)`，避免日後增加新欄位時導致參數錯位寫入錯誤欄位。
+
+### 3. 資料型態與格式機制
+- **布林值 (Boolean)**：SQLite 沒有原生的布林型別。寫入 DB 時請預設轉換為數字 `1` (true) 或 `0` (false)。
+- **日期與時間 (Date/Time)**：統一使用 ISO 8601 格式字串（例如 `YYYY-MM-DD` 或 `YYYY-MM-DD HH:mm:ss`）儲存，方便後續 SQL 排序與區間比較查詢。
+- **JSON 欄位**：若欄位（如訂單的 `deliverables`）必須儲存複雜陣列或物件，寫入前確保使用 `JSON.stringify(data)`，讀取時使用 `JSON.parse(row.col || '[]')` 並提供空陣列作為容錯備用值。
+
+### 4. 軟刪除 (Soft Delete)
+- **避免使用實體 DELETE 指令**：若非必要，不要從資料庫永久刪除核心營運資料（例如報價單、訂單）。請在該資料表加入 `deleted_at TEXT DEFAULT NULL` 欄位。
+- **寫入軟刪除**：執行刪除操作時，改用 `UPDATE table SET deleted_at = datetime('now','localtime') WHERE id = ?`。
+- **查詢過濾**：在所有影響清單呈現的 `SELECT` 查詢中，務必加上 `WHERE deleted_at IS NULL` 條件。
+
+---
+
+## 🚑 6. 常見問題排除
 
 | 問題狀況 | 原因與解決方法 |
 | --- | --- |

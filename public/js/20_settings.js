@@ -209,11 +209,9 @@ function renderSettings(){
     '</div>'+
     '<div class="danger-zone">'+
     '<div class="danger-title">DANGER ZONE</div>'+
-    '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">清除所有交易資料</div><div class="danger-action-desc">刪除報價單、訂單、採購單、應收/付帳款。客戶、廠商、服務與設定保留。</div></div><button class="btn btn-danger" onclick="confirmClearTransactions()">清除交易資料</button></div>'+
-    '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">清除所有基本資料</div><div class="danger-action-desc">刪除客戶、廠商、服務項目。</div></div><button class="btn btn-danger" onclick="confirmClearMasterData()">清除基本資料</button></div>'+
-    '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">清除所有資料</div><div class="danger-action-desc">清空整個資料庫，設定保留。</div></div><button class="btn btn-danger" onclick="confirmClearAll()">清除所有資料</button></div>'+
-    '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">重置所有設定</div><div class="danger-action-desc">將設定恢復出廠預設，資料不受影響。</div></div><button class="btn btn-danger" onclick="confirmResetSettings()">重置設定</button></div>'+
-    '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">完全重置</div><div class="danger-action-desc">刪除所有資料與設定，重新載入示範資料。</div></div><button class="btn btn-danger" onclick="confirmFullReset()">完全重置</button></div>'+
+    '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">刪除所有資料，讓系統完全為空</div><div class="danger-action-desc">清除所有交易明細、基本資料及系統設定。重啟伺服器後不會出現範本資料。</div></div><button class="btn btn-danger" onclick="confirmWipeEverything()">完全清空系統</button></div>'+
+    '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">刪除所有資料，但保留設定</div><div class="danger-action-desc">刪除所有業務資料及基本資料，系統設定（公司資訊、預設值）將不受影響。</div></div><button class="btn btn-danger" onclick="confirmClearAll()">刪除並保留設定</button></div>'+
+    '<div class="danger-action"><div class="danger-action-info"><div class="danger-action-label">回復到原廠保留範例資料的狀態</div><div class="danger-action-desc">刪除所有資料與設定，然後立刻重新載入系統範例資料。</div></div><button class="btn btn-danger" onclick="confirmFullReset()">還原原廠範例</button></div>'+
     '</div>';
 
   const tabs=[

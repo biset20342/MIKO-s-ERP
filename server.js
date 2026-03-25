@@ -101,7 +101,7 @@ function nextNo(type, tbl) {
 }
 
 const customerCount = db.prepare('SELECT COUNT(*) as c FROM customers').get().c;
-if (customerCount === 0) {
+if (customerCount === 0 && getSetting('wiped') !== '1') {
   console.log('[Init] 建立示範資料...');
   const run = (sql, p = []) => db.prepare(sql).run(...p);
   const get = (sql, p = []) => db.prepare(sql).get(...p);
