@@ -6,11 +6,11 @@
 
 /** 處理 renderRFQ 相關操作。 */
 function renderRFQ(){
-  const rows=q(`SELECT r.*,o.order_no,o.title as otitle,
+  const rows=q(`SELECT r.*,o.order_no,o.title as otitle, p.project_no,
     (SELECT COUNT(*) FROM rfq_suppliers rs WHERE rs.rfq_id=r.id) as sup_count,
     (SELECT COUNT(*) FROM supplier_quotes sq WHERE sq.rfq_id=r.id) as quote_count,
     (SELECT COUNT(*) FROM supplier_quotes sq WHERE sq.rfq_id=r.id AND sq.selected=1) as selected_count
-    FROM rfqs r LEFT JOIN orders o ON r.order_id=o.id
+    FROM rfqs r LEFT JOIN orders o ON r.order_id=o.id LEFT JOIN projects p ON r.project_id=p.id
     WHERE r.deleted_at IS NULL ORDER BY r.date DESC`);
   const statusMap={open:{l:'詢價中',c:'badge-blue'},closed:{l:'已結案',c:'badge-gray'},cancelled:{l:'已取消',c:'badge-gray'}};
   return `<div style="margin-bottom:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.8">
@@ -21,7 +21,7 @@ function renderRFQ(){
   <div class="panel"><div class="panel-header"><div class="panel-title">詢價單管理</div></div>
   <div class="filter-bar"><input type="text" id="frfq" placeholder="搜尋詢價單號、說明、關聯專案..." oninput="filterRFQ(this.value)">
   <span class="filter-count" id="rfq-count">${rows.length} 筆</span></div>
-  <table><thead><tr><th>詢價單號</th><th>說明</th><th>關聯專案</th><th>詢價日期</th><th>截止日</th><th>詢價廠商</th><th>已回報</th><th>狀態</th><th>操作</th></tr></thead>
+  <table><thead><tr><th>詢價單號</th><th>說明</th><th>歸屬專案</th><th>關聯訂單</th><th>詢價日期</th><th>截止日</th><th>詢價廠商</th><th>已回報</th><th>狀態</th><th>操作</th></tr></thead>
   <tbody id="rfq-tbody">${renderRFQRows(rows)}</tbody></table></div>`;
 }
 
@@ -34,6 +34,7 @@ function renderRFQRows(rows){
     return '<tr>'+
     '<td class="td-mono td-main">'+r.rfq_no+'</td>'+
     '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.description||'—')+'</td>'+
+    '<td class="td-mono">'+(r.project_no?'<span style="color:var(--accent5)">'+r.project_no+'</span>':'—')+'</td>'+
     '<td class="td-mono">'+(r.order_no?'<span style="color:var(--accent5)">'+r.order_no+'</span>':'—')+'</td>'+
     '<td class="td-mono">'+(r.date||'')+'</td>'+
     '<td class="td-mono"'+(expired?' style="color:var(--accent4)"':'')+'>'+(r.deadline||'—')+'</td>'+
@@ -51,19 +52,23 @@ function renderRFQRows(rows){
 
 /** 處理 filterRFQ 相關操作。 */
 function filterRFQ(sq){
-  let rows=q(`SELECT r.*,o.order_no,(SELECT COUNT(*) FROM rfq_suppliers rs WHERE rs.rfq_id=r.id) as sup_count,(SELECT COUNT(*) FROM supplier_quotes sq WHERE sq.rfq_id=r.id) as quote_count FROM rfqs r LEFT JOIN orders o ON r.order_id=o.id WHERE r.deleted_at IS NULL ORDER BY r.date DESC`);
-  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['rfq_no','description','order_no'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
+  let rows=q(`SELECT r.*,o.order_no,p.project_no,(SELECT COUNT(*) FROM rfq_suppliers rs WHERE rs.rfq_id=r.id) as sup_count,(SELECT COUNT(*) FROM supplier_quotes sq WHERE sq.rfq_id=r.id) as quote_count FROM rfqs r LEFT JOIN orders o ON r.order_id=o.id LEFT JOIN projects p ON r.project_id=p.id WHERE r.deleted_at IS NULL ORDER BY r.date DESC`);
+  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['rfq_no','description','order_no','project_no'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
   document.getElementById('rfq-tbody').innerHTML=renderRFQRows(rows);
   document.getElementById('rfq-count').textContent=rows.length+' 筆';
 }
 
 /** 處理 showAddRFQ 相關操作。 */
 function showAddRFQ(){
+  const _projs=q("SELECT id,project_no,title FROM projects WHERE status='active' AND deleted_at IS NULL ORDER BY date DESC");
   const activeOrders=q("SELECT id,order_no,title FROM orders WHERE status='active' AND phase NOT IN('completed','cancelled') AND deleted_at IS NULL ORDER BY date DESC");
   _supps=q("SELECT id,name,specialty FROM suppliers ORDER BY name");
   openModal('新增詢價單',
     `<div class="form-row"><label>詢價說明 *</label><input type="text" id="f-rfq-desc" placeholder="例：CNC 鋁合金零件加工詢價"></div>
-    <div class="form-row"><label>關聯專案（選填）</label><select id="f-rfq-order"><option value="">不關聯</option>${activeOrders.map(o=>`<option value="${o.id}">[${o.order_no}] ${o.title}</option>`).join('')}</select></div>
+    <div class="form-row-2">
+      <div class="form-row"><label>歸屬專案（選填）</label><select id="f-rfq-proj"><option value="">不關聯</option>${_projs.map(p=>`<option value="${p.id}">${p.project_no} - ${p.title}</option>`).join('')}</select></div>
+      <div class="form-row"><label>關聯訂單（選填）</label><select id="f-rfq-order"><option value="">不關聯</option>${activeOrders.map(o=>`<option value="${o.id}">[${o.order_no}] ${o.title}</option>`).join('')}</select></div>
+    </div>
     <div class="form-row-2">
       <div class="form-row"><label>詢價日期 *</label><input type="date" id="f-rfq-date" value="${today()}"></div>
       <div class="form-row"><label>回覆截止日</label><input type="date" id="f-rfq-deadline" value="${addDays(today(),7)}"></div>
@@ -76,6 +81,7 @@ function showAddRFQ(){
     <div class="form-row" style="margin-top:10px"><label>備註</label><textarea id="f-rfq-notes" placeholder="選填"></textarea></div>`,
     ()=>{
       const desc=document.getElementById('f-rfq-desc').value.trim();
+      const projId=document.getElementById('f-rfq-proj').value||null;
       const orderId=document.getElementById('f-rfq-order').value||null;
       const date=document.getElementById('f-rfq-date').value;
       const deadline=document.getElementById('f-rfq-deadline').value;
@@ -84,8 +90,8 @@ function showAddRFQ(){
       const selSupps=[...document.querySelectorAll('.rfq-sup-cb:checked')].map(c=>parseInt(c.value));
       if(!desc||!date){toast('請填寫詢價說明與日期','error');return;}
       const rfqNo=nextNo('RFQ','rfqs');
-      exec("INSERT INTO rfqs(rfq_no,order_id,description,specs,date,deadline,status,notes) VALUES(?,?,?,?,?,?,'open',?)",
-        [rfqNo,orderId,desc,specs,date,deadline||null,notes]);
+      exec("INSERT INTO rfqs(project_id,rfq_no,order_id,description,specs,date,deadline,status,notes) VALUES(?,?,?,?,?,?,?,?,'open',?)",
+        [projId,rfqNo,orderId,desc,specs,date,deadline||null,notes]);
       const rid=lastId();
       selSupps.forEach(sid=>exec("INSERT INTO rfq_suppliers(rfq_id,supplier_id) VALUES(?,?)",[rid,sid]));
       toast(`詢價單 ${rfqNo} 已建立，已選 ${selSupps.length} 家廠商`,'success');
@@ -136,6 +142,7 @@ function showSelectRFQQuote(rfqId){
   const sq=q1("SELECT sq.*,s.name as sn FROM supplier_quotes sq LEFT JOIN suppliers s ON sq.supplier_id=s.id WHERE sq.rfq_id=? AND sq.selected=1 LIMIT 1",[rfqId]);
   if(!sq){toast('請先在詢價單詳情中選定廠商報價','error');return;}
   const r=q1("SELECT * FROM rfqs WHERE id=?",[rfqId]);
+  const _projs=q("SELECT id,project_no,title FROM projects WHERE status='active' AND deleted_at IS NULL ORDER BY date DESC");
   const activeOrders=q("SELECT id,order_no,title FROM orders WHERE status='active' AND phase NOT IN('completed','cancelled') AND deleted_at IS NULL ORDER BY date DESC");
   const defTax=getSetting('default_tax_rate','5');
   const defPay=parseInt(getSetting('default_payment_days','30'));
@@ -147,7 +154,10 @@ function showSelectRFQQuote(rfqId){
       <span style="color:var(--text3)">交期：</span><strong>${sq.lead_time_days||'—'} 天</strong>
     </div>
     <div class="form-row"><label>採購說明 *</label><input type="text" id="f-os-desc" value="${escQ(r.description||'')}" placeholder="採購說明"></div>
-    <div class="form-row"><label>關聯專案</label><select id="f-os-order"><option value="">不關聯</option>${activeOrders.map(o=>`<option value="${o.id}"${r.order_id==o.id?' selected':''}>[${o.order_no}] ${o.title}</option>`).join('')}</select></div>
+    <div class="form-row-2">
+      <div class="form-row"><label>歸屬專案</label><select id="f-os-proj"><option value="">無</option>${_projs.map(p=>`<option value="${p.id}"${r.project_id==p.id?' selected':''}>${p.project_no} - ${p.title}</option>`).join('')}</select></div>
+      <div class="form-row"><label>關聯訂單</label><select id="f-os-order"><option value="">無</option>${activeOrders.map(o=>`<option value="${o.id}"${r.order_id==o.id?' selected':''}>[${o.order_no}] ${o.title}</option>`).join('')}</select></div>
+    </div>
     <div class="form-row-2">
       <div class="form-row"><label>採購日期</label><input type="date" id="f-os-date" value="${today()}"></div>
       <div class="form-row"><label>預計交貨日</label><input type="date" id="f-os-exp" value="${sq.lead_time_days?addDays(today(),sq.lead_time_days):addDays(today(),14)}"></div>
@@ -161,6 +171,7 @@ function showSelectRFQQuote(rfqId){
     ()=>{
       const suppId=sq.supplier_id;
       const desc=document.getElementById('f-os-desc').value.trim();
+      const projId=document.getElementById('f-os-proj').value||null;
       const ordId=document.getElementById('f-os-order').value||null;
       const date=document.getElementById('f-os-date').value;
       const exp=document.getElementById('f-os-exp').value;
@@ -171,8 +182,8 @@ function showSelectRFQQuote(rfqId){
       const tax=Math.round(excl*taxRate)/100;
       const total=excl+tax;
       const osNo=nextNo('PO','outsource_orders');
-      exec("INSERT INTO outsource_orders(os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description,notes,quote_file_url,rfq_id) VALUES(?,?,?,?,?,'pending',?,?,?,?,?,?,?,?)",
-        [osNo,ordId,suppId,date,exp||null,excl,taxRate,tax,total,desc,notes,sq.file_url||null,rfqId]);
+      exec("INSERT INTO outsource_orders(project_id,os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description,notes,quote_file_url,rfq_id) VALUES(?,?,?,?,?,?,?,'pending',?,?,?,?,?,?,?,?)",
+        [projId,osNo,ordId,suppId,date,exp||null,excl,taxRate,tax,total,desc,notes,sq.file_url||null,rfqId]);
       const osid=lastId();
       const defPayDays=parseInt(getSetting('default_payment_days','30'));
       exec("INSERT OR IGNORE INTO payables(os_id,amount,due_date,status) VALUES(?,?,?,'unpaid')",[osid,total,addDays(exp||date,defPayDays)]);
@@ -187,8 +198,12 @@ function showEditRFQ(id){
   const r=q1("SELECT * FROM rfqs WHERE id=?",[id]);
   const selSupps=q("SELECT supplier_id FROM rfq_suppliers WHERE rfq_id=?",[id]).map(x=>x.supplier_id);
   _supps=q("SELECT id,name,specialty FROM suppliers ORDER BY name");
+  const _projs=q("SELECT id,project_no,title FROM projects WHERE status='active' AND deleted_at IS NULL ORDER BY date DESC");
   openModal('編輯詢價單 — '+r.rfq_no,
-    `<div class="form-row"><label>詢價說明</label><input type="text" id="f-rfq-desc" value="${escQ(r.description||'')}"></div>
+    `<div class="form-row-2">
+      <div class="form-row"><label>歸屬專案</label><select id="f-rfq-proj"><option value="">不關聯</option>${_projs.map(p=>`<option value="${p.id}"${p.id===r.project_id?' selected':''}>${p.project_no} - ${p.title}</option>`).join('')}</select></div>
+      <div class="form-row"><label>詢價說明</label><input type="text" id="f-rfq-desc" value="${escQ(r.description||'')}"></div>
+    </div>
     <div class="form-row-3">
       <div class="form-row"><label>建立日期</label><input type="date" id="f-rfq-date" value="${r.date||today()}"></div>
       <div class="form-row"><label>截止日</label><input type="date" id="f-rfq-deadline" value="${r.deadline||''}"></div>
@@ -200,13 +215,14 @@ function showEditRFQ(id){
     </div>
     <div class="form-row" style="margin-top:8px"><label>備註</label><textarea id="f-rfq-notes">${escQ(r.notes||'')}</textarea></div>`,
     ()=>{
+      const projId=document.getElementById('f-rfq-proj').value||null;
       const desc=document.getElementById('f-rfq-desc').value.trim();
       const date=document.getElementById('f-rfq-date').value;
       const deadline=document.getElementById('f-rfq-deadline').value;
       const specs=document.getElementById('f-rfq-specs').value;
       const notes=document.getElementById('f-rfq-notes').value;
       const newSupps=[...document.querySelectorAll('.rfq-sup-cb:checked')].map(c=>parseInt(c.value));
-      exec("UPDATE rfqs SET description=?,date=?,deadline=?,specs=?,notes=? WHERE id=?",[desc,date||null,deadline||null,specs,notes,id]);
+      exec("UPDATE rfqs SET project_id=?,description=?,date=?,deadline=?,specs=?,notes=? WHERE id=?",[projId,desc,date||null,deadline||null,specs,notes,id]);
       exec("DELETE FROM rfq_suppliers WHERE rfq_id=?",[id]);
       newSupps.forEach(sid=>exec("INSERT INTO rfq_suppliers(rfq_id,supplier_id) VALUES(?,?)",[id,sid]));
       toast('詢價單已更新','success');closeModal();go(cur);

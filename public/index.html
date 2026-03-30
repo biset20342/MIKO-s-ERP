@@ -21,9 +21,10 @@
   <nav class="nav">
     <div class="nav-section">專案管理</div>
     <div class="nav-item active" data-sec="dashboard" onclick="go('dashboard')"><span class="icon">📊</span>儀表板</div>
+    <div class="nav-item" data-sec="projects" onclick="go('projects')"><span class="icon">📁</span>專案列表</div>
     <div class="nav-item" data-sec="quotes" onclick="go('quotes')"><span class="icon">📋</span>報價單<span class="nav-badge" id="badge-qt" style="background:var(--accent)">0</span></div>
     <div class="nav-item" data-sec="quote_history" onclick="go('quote_history')" style="margin-left:14px;border-left:2px solid var(--border);padding-left:14px;font-size:12.5px;color:var(--text2)"><span class="icon" style="font-size:13px">📜</span>版本與歷史</div>
-    <div class="nav-item" data-sec="orders" onclick="go('orders')"><span class="icon">📁</span>專案訂單<span class="nav-badge" id="badge-orders">0</span></div>
+    <div class="nav-item" data-sec="orders" onclick="go('orders')"><span class="icon">📑</span>訂單管理<span class="nav-badge" id="badge-orders">0</span></div>
     <div class="nav-item" data-sec="analytics" onclick="go('analytics')"><span class="icon">📈</span>分析與統計</div>
     <div class="nav-section">委外管理</div>
     <div class="nav-item" data-sec="rfq" onclick="go('rfq')"><span class="icon">📝</span>詢價單<span class="nav-badge" id="badge-rfq" style="background:var(--accent)">0</span></div>
@@ -97,5 +98,6 @@
   <script src="js/21_csv.js"></script>
   <script src="js/22_pdf.js"></script>
   <script src="js/23_init.js"></script>
+  <script src="js/24_projects.js"></script>
 </body>
 </html>

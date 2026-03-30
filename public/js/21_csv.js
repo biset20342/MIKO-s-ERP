@@ -93,9 +93,4 @@ function exportCSV(filename,headers,rows){
   const a=document.createElement('a');a.href=url;a.download=filename;a.click();
   URL.revokeObjectURL(url);toast('CSV 已匯出 ✓','success');
 }
-
-/** 處理 exportDB 相關操作。 */
-function exportDB(){
-  try{const blob=new Blob([db.export()],{type:'application/octet-stream'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='project-erp-'+today()+'.db';a.click();URL.revokeObjectURL(url);toast('資料庫已匯出 ✓','success');}
-  catch(e){toast('匯出失敗','error');}
-}
+

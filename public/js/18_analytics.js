@@ -47,8 +47,12 @@ function applyAnalyticsSettings() {
 function renderAnalytics(){
   // 全域 KPI 數據
   const dtFilt = getAnalyticsDateFilter('o.date');
-  const rows=q(`SELECT o.id,o.order_no,o.title,c.name as cn,o.date,o.phase,o.total,COALESCE((SELECT SUM(os.total) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL),0) as cost FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} ORDER BY o.date DESC`);
-  const totalRev=rows.reduce((s,r)=>s+r.total,0);
+  const rows=q(`SELECT o.id,o.order_no,o.title,c.name as cn,o.date,o.phase,o.total,
+    COALESCE((SELECT SUM(r.amount) FROM receivables r WHERE r.order_id=o.id AND r.status='paid'),0) as paid_total,
+    COALESCE((SELECT SUM(r.amount) FROM receivables r WHERE r.order_id=o.id AND r.status='unpaid'),0) as unpaid_total,
+    COALESCE((SELECT SUM(os.total) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL),0) as cost FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} ORDER BY o.date DESC`);
+  const totalRev=rows.reduce((s,r)=>s+r.paid_total,0);
+  const totalUnpaid=rows.reduce((s,r)=>s+r.unpaid_total,0);
   const totalCost=rows.reduce((s,r)=>s+r.cost,0);
   const totalPft=totalRev-totalCost;
   const avgPct=totalRev>0?Math.round(totalPft/totalRev*100):0;
@@ -79,8 +83,9 @@ function renderAnalytics(){
     </div>
     <button class="btn btn-sm" style="background:var(--accent5);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:13px;margin-left:auto;font-weight:600;cursor:pointer;transition:opacity 0.2s" onclick="applyAnalyticsSettings()">套用過濾</button>
   </div>
-  <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-label">總收入（含稅）</div><div class="kpi-value blue">$${fmt(totalRev)}</div><div class="kpi-delta">${rows.length} 個專案</div></div>
+  <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr)">
+    <div class="kpi-card blue"><div class="kpi-label">總收入（已收，含稅）</div><div class="kpi-value blue">$${fmt(totalRev)}</div><div class="kpi-delta">${rows.length} 個專案</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">未收帳款</div><div class="kpi-value orange" style="color:#f59e0b">$${fmt(totalUnpaid)}</div><div class="kpi-delta">待收款項</div></div>
     <div class="kpi-card red"><div class="kpi-label">總委外成本</div><div class="kpi-value red">$${fmt(totalCost)}</div><div class="kpi-delta">${totalRev>0?Math.round(totalCost/totalRev*100):0}% 成本佔比</div></div>
     <div class="kpi-card green"><div class="kpi-label">毛利合計</div><div class="kpi-value green">$${fmt(totalPft)}</div><div class="kpi-delta ${totalPft>=0?'up':'dn'}">${totalPft>=0?'▲':'▼'} 淨利</div></div>
     <div class="kpi-card purple"><div class="kpi-label">平均毛利率</div><div class="kpi-value purple">${avgPct}%</div><div class="kpi-delta">${activeCount} 個進行中</div></div>
@@ -158,7 +163,7 @@ function renderAnalyticsTab_monthly(){
   }
 
   const data=months.map(m=>{
-    const rev=q1("SELECT COALESCE(SUM(total),0) as v FROM orders WHERE strftime('%Y-%m',date)=? AND phase NOT IN('cancelled') AND deleted_at IS NULL",[m])?.v||0;
+    const rev=q1("SELECT COALESCE(SUM(r.amount),0) as v FROM receivables r JOIN orders o ON r.order_id=o.id WHERE r.status='paid' AND strftime('%Y-%m',o.date)=? AND o.phase NOT IN('cancelled') AND o.deleted_at IS NULL",[m])?.v||0;
     const cost=q1("SELECT COALESCE(SUM(total),0) as v FROM outsource_orders WHERE strftime('%Y-%m',date)=? AND deleted_at IS NULL",[m])?.v||0;
     const cnt=q1("SELECT COUNT(*) as c FROM orders WHERE strftime('%Y-%m',date)=? AND phase NOT IN('cancelled') AND deleted_at IS NULL",[m])?.c||0;
     return {month:m,rev,cost,profit:rev-cost,pct:rev>0?Math.round((rev-cost)/rev*100):0,count:cnt};
@@ -214,7 +219,7 @@ function renderCustAnalyticsRows(rows,grandRev,maxRev){
 /** 處理 filterCustAnalytics 相關操作。 */
 function filterCustAnalytics(sq){
   const dtFilt = getAnalyticsDateFilter('o.date');
-  let rows=q(`SELECT c.id,c.name,COUNT(o.id) as order_count,COALESCE(SUM(o.total),0) as total_rev,COALESCE(SUM((SELECT COALESCE(SUM(os.total),0) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL)),0) as total_cost FROM customers c LEFT JOIN orders o ON o.customer_id=c.id AND o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} GROUP BY c.id ORDER BY total_rev DESC`);
+  let rows=q(`SELECT c.id,c.name,COUNT(o.id) as order_count,COALESCE(SUM((SELECT SUM(r.amount) FROM receivables r WHERE r.order_id=o.id AND r.status='paid')),0) as total_rev,COALESCE(SUM((SELECT COALESCE(SUM(os.total),0) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL)),0) as total_cost FROM customers c LEFT JOIN orders o ON o.customer_id=c.id AND o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} GROUP BY c.id ORDER BY total_rev DESC`);
   const grandRev=rows.reduce((s,r)=>s+r.total_rev,0);
   const maxRev=Math.max(...rows.map(r=>r.total_rev),1);
   if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>String(r.name||'').toLowerCase().includes(s));}
@@ -225,8 +230,8 @@ function filterCustAnalytics(sq){
 /** 處理 exportCustomerAnalyticsCSV 相關操作。 */
 function exportCustomerAnalyticsCSV(){
   const dtFilt = getAnalyticsDateFilter('o.date');
-  const rows=q(`SELECT c.name,COUNT(o.id) as order_count,COALESCE(SUM(o.total),0) as total_rev,COALESCE(SUM((SELECT COALESCE(SUM(os.total),0) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL)),0) as total_cost FROM customers c LEFT JOIN orders o ON o.customer_id=c.id AND o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} GROUP BY c.id ORDER BY total_rev DESC`);
-  exportCSV('customer-analytics-'+today()+'.csv',['客戶','訂單數','總收入','總成本','總毛利','毛利率%'],rows.map(r=>{const p=r.total_rev-r.total_cost;return[r.name,r.order_count,r.total_rev,r.total_cost,p,r.total_rev>0?Math.round(p/r.total_rev*100):0];}));
+  const rows=q(`SELECT c.name,COUNT(o.id) as order_count,COALESCE(SUM((SELECT SUM(r.amount) FROM receivables r WHERE r.order_id=o.id AND r.status='paid')),0) as total_rev,COALESCE(SUM((SELECT COALESCE(SUM(os.total),0) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL)),0) as total_cost FROM customers c LEFT JOIN orders o ON o.customer_id=c.id AND o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} GROUP BY c.id ORDER BY total_rev DESC`);
+  exportCSV('customer-analytics-'+today()+'.csv',['客戶','訂單數','總收入(已收)','總成本','總毛利','毛利率%'],rows.map(r=>{const p=r.total_rev-r.total_cost;return[r.name,r.order_count,r.total_rev,r.total_cost,p,r.total_rev>0?Math.round(p/r.total_rev*100):0];}));
 }
 
 /** 處理 renderSuppAnalyticsRows 相關操作。 */

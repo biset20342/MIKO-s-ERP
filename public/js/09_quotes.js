@@ -7,7 +7,7 @@
 /** 處理 renderQuotes 相關操作。 */
 function renderQuotes(){
   const s=getSort('quotes','date');
-  let rows=q("SELECT q.*,c.name as cn FROM quotes q LEFT JOIN customers c ON q.customer_id=c.id WHERE q.deleted_at IS NULL AND q.status != 'superseded' ORDER BY q.date DESC");
+  let rows=q("SELECT q.*,c.name as cn, p.project_no, p.title as p_title FROM quotes q LEFT JOIN customers c ON q.customer_id=c.id LEFT JOIN projects p ON q.project_id=p.id WHERE q.deleted_at IS NULL AND q.status != 'superseded' ORDER BY q.date DESC");
   rows=sortArr(rows,s.col==='cn'?'cn':s.col,s.dir);
   return `<div class="panel"><div class="panel-header"><div class="panel-title">報價單</div><button class="btn btn-ghost btn-sm" onclick="exportQuotesCSV()">↓ CSV</button></div>
   <div class="filter-bar">
@@ -17,7 +17,7 @@ function renderQuotes(){
     </select>
     <span class="filter-count" id="q-count">${rows.length} 筆</span>
   </div>
-  <table><thead><tr>${sth('quotes','quote_no','報價單號')}${sth('quotes','title','標題')}${sth('quotes','cn','客戶')}${sth('quotes','date','日期')}${sth('quotes','valid_until','有效期')}${sth('quotes','total','含稅金額')}<th>狀態</th><th>操作</th></tr></thead>
+  <table><thead><tr>${sth('quotes','quote_no','報價單號')}<th>專案標題</th>${sth('quotes','title','標題')}${sth('quotes','cn','客戶')}${sth('quotes','date','日期')}${sth('quotes','valid_until','有效期')}${sth('quotes','total','含稅金額')}<th>狀態</th><th>操作</th></tr></thead>
   <tbody id="q-tbody">${renderQRows(rows)}</tbody></table></div>`;
 }
 
@@ -27,10 +27,12 @@ function renderQRows(rows){
     const canConvert=q2.status==='accepted'&&!q2.converted_order_id;
     const alreadyConverted=q2.status==='accepted'&&q2.converted_order_id;
     const active=q2.status!=='accepted'&&q2.status!=='rejected';
+    const canEdit=q2.status!=='rejected'&&q2.status!=='superseded';
     const linkedOrder=q2.converted_order_id?q1("SELECT order_no FROM orders WHERE id=?",[q2.converted_order_id]):null;
     return '<tr>'+
     '<td class="td-mono td-main">'+q2.quote_no+(q2.version>1?'<span class="badge badge-purple" style="margin-left:5px;font-size:9px">v'+q2.version+'</span>':'')+'</td>'+
-    '<td class="td-main" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(q2.title||'—')+'</td>'+
+    '<td class="td-main" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(q2.p_title?'<span style="color:var(--accent5)" title="'+(q2.p_title.replace(/"/g,'&quot;'))+'">'+q2.p_title+'</span>':'—')+'</td>'+
+    '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(q2.title||'—')+'</td>'+
     '<td>'+(q2.cn||'—')+'</td>'+
     '<td class="td-mono">'+(q2.date||'')+'</td>'+
     '<td class="td-mono"'+( q2.valid_until&&q2.valid_until<today()&&active?' style="color:var(--accent4)"':'')+'>'+(q2.valid_until||'—')+'</td>'+
@@ -38,7 +40,7 @@ function renderQRows(rows){
     '<td>'+qsBadge(q2.status)+(alreadyConverted&&linkedOrder?'<span class="badge badge-teal" style="margin-left:4px">→'+linkedOrder.order_no+'</span>':'')+'</td>'+
     '<td><div class="td-actions">'+
     '<button class="btn btn-sm btn-ghost" onclick="showQuoteDetail('+q2.id+')">詳情</button>'+
-    (active?'<button class="btn btn-sm btn-ghost" onclick="showEditQuote('+q2.id+')">編輯</button>':'')+
+    (canEdit?'<button class="btn btn-sm btn-ghost" onclick="showEditQuote('+q2.id+')">編輯</button>':'')+
     (q2.status==='draft'?'<button class="btn btn-sm btn-success" onclick="setQStatus('+q2.id+',\'sent\')">發送</button>':'')+
     (q2.status==='sent'?'<button class="btn btn-sm btn-success" onclick="setQStatus('+q2.id+',\'accepted\')">客戶接受</button><button class="btn btn-sm btn-warning" onclick="setQStatus('+q2.id+',\'rejected\')">拒絕</button>':'')+
     (canConvert?'<button class="btn btn-sm btn-convert" onclick="convertQuoteToOrder('+q2.id+')">→ 轉為訂單</button>':'')+
@@ -50,9 +52,9 @@ function renderQRows(rows){
 
 /** 處理 filterQ 相關操作。 */
 function filterQ(sq,st){
-  let rows=q("SELECT q.*,c.name as cn FROM quotes q LEFT JOIN customers c ON q.customer_id=c.id WHERE q.deleted_at IS NULL AND q.status != 'superseded' ORDER BY q.date DESC");
-  if(st)rows=rows.filter(r=>r.status===st);
-  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['quote_no','title','cn'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
+  let rows=q("SELECT q.*,c.name as cn, p.project_no, p.title as p_title FROM quotes q LEFT JOIN customers c ON q.customer_id=c.id LEFT JOIN projects p ON q.project_id=p.id WHERE q.deleted_at IS NULL AND q.status != 'superseded' ORDER BY q.date DESC");
+  if(st)rows=rows.filter(r=>st==='expired'?(r.valid_until&&r.valid_until<today()):r.status===st);
+  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['quote_no','project_no','p_title','title','cn'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
   document.getElementById('q-tbody').innerHTML=renderQRows(rows);
   document.getElementById('q-count').textContent=rows.length+' 筆';
 }
@@ -142,8 +144,12 @@ function showAddQuote(){
 function quoteForm(q2=null,items=[]){
   const defTax=q2?null:getSetting('default_tax_rate','5');
   const defValid=q2?null:parseInt(getSetting('default_quote_valid_days','30'));
+  const _projs=q("SELECT id,project_no,title FROM projects WHERE status='active' AND deleted_at IS NULL ORDER BY date DESC");
   return `<div class="form-row"><label>報價標題 *</label><input type="text" id="f-title" value="${escQ(q2?.title||'')}" placeholder="例：鋁合金支架設計報價"></div>
-  <div class="form-row"><label>客戶 *</label><select id="f-cust"><option value="">-- 選擇客戶 --</option>${_custs.map(c=>`<option value="${c.id}"${q2?.customer_id==c.id?' selected':''}>${c.name}</option>`).join('')}</select></div>
+  <div class="form-row-2">
+    <div class="form-row"><label>客戶 *</label><select id="f-cust"><option value="">-- 選擇客戶 --</option>${_custs.map(c=>`<option value="${c.id}"${q2?.customer_id==c.id?' selected':''}>${c.name}</option>`).join('')}</select></div>
+    <div class="form-row"><label>歸屬專案</label><select id="f-proj"><option value="">-- 無關聯專案 --</option>${_projs.map(p=>`<option value="${p.id}"${p.id===q2?.project_id?' selected':''}>${p.project_no} - ${p.title}</option>`).join('')}</select></div>
+  </div>
   <div class="form-row-3">
     <div class="form-row"><label>報價日期 *</label><input type="date" id="f-date" value="${q2?.date||today()}"></div>
     <div class="form-row"><label>有效期至</label><input type="date" id="f-valid" value="${q2?.valid_until||addDays(today(),defValid||30)}"></div>
@@ -169,14 +175,15 @@ function saveQuote(){
   const date=document.getElementById('f-date').value;
   const valid=document.getElementById('f-valid').value;
   const taxRate=parseFloat(document.getElementById('f-tax').value||'5');
+  const projId=document.getElementById('f-proj').value||null;
   const notes=document.getElementById('f-notes').value;
   if(!title||!custId||!date){toast('請填寫標題、客戶與日期','error');return;}
   const items=getItems();
   const excl=items.reduce((s,i)=>s+i.qty*i.price,0);
   const tax=Math.round(excl*taxRate)/100;
   const qNo=nextNo('QT','quotes');
-  exec("INSERT INTO quotes(quote_no,customer_id,title,date,valid_until,status,total_excl,tax_rate,tax_amount,total,notes) VALUES(?,?,?,?,?,'draft',?,?,?,?,?)",
-    [qNo,custId,title,date,valid||null,excl,taxRate,tax,excl+tax,notes]);
+  exec("INSERT INTO quotes(project_id,quote_no,customer_id,title,date,valid_until,status,total_excl,tax_rate,tax_amount,total,notes) VALUES(?,?,?,?,?,?,?,'draft',?,?,?,?,?)",
+    [projId,qNo,custId,title,date,valid||null,excl,taxRate,tax,excl+tax,notes]);
   const qid=lastId();
   items.forEach(i=>{
     const svc=_svcs.find(s=>s.name===i.desc);
@@ -200,12 +207,13 @@ function showEditQuote(id){
     const date=document.getElementById('f-date').value;
     const valid=document.getElementById('f-valid').value;
     const taxRate=parseFloat(document.getElementById('f-tax').value||'5');
+    const projId=document.getElementById('f-proj').value||null;
     const notes=document.getElementById('f-notes').value;
     if(!title||!custId||!date){toast('請填寫必填欄位','error');return;}
     const items2=getItems();
     const excl=items2.reduce((s,i)=>s+i.qty*i.price,0);
     const tax=Math.round(excl*taxRate)/100;
-    exec("UPDATE quotes SET customer_id=?,title=?,date=?,valid_until=?,tax_rate=?,total_excl=?,tax_amount=?,total=?,notes=? WHERE id=?",[custId,title,date,valid||null,taxRate,excl,tax,excl+tax,notes,id]);
+    exec("UPDATE quotes SET project_id=?,customer_id=?,title=?,date=?,valid_until=?,tax_rate=?,total_excl=?,tax_amount=?,total=?,notes=? WHERE id=?",[projId,custId,title,date,valid||null,taxRate,excl,tax,excl+tax,notes,id]);
     exec("DELETE FROM quote_items WHERE quote_id=?",[id]);
     items2.forEach(i=>{const svc=_svcs.find(s=>s.name===i.desc);exec("INSERT INTO quote_items(quote_id,service_id,description,qty,unit,unit_price,is_subitem) VALUES(?,?,?,?,?,?,?)",[id,svc?.id||null,i.desc,i.qty,i.unit,i.price,i.isSub?1:0]);});
     logQuoteHistory(id,'edited','編輯報價內容');

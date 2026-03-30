@@ -64,7 +64,8 @@ function renderSettings(){
     srow('流水號位數','',ssel('s-pad',[{v:'3',l:'3 位 (001)'},{v:'4',l:'4 位 (0001)'},{v:'5',l:'5 位 (00001)'}],g('no_padding')||'3'))+
     '</div>'+
     '<div class="s-section"><div class="s-section-title">各類前綴</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'+
+    '<div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">專案編號</div><input type="text" id="s-pre-prj-grp" value="'+escQ(g('prefix_prj_grp')||'PRJ_GRP')+'" style="'+inp+'"></div>'+
     '<div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">報價單</div><input type="text" id="s-pre-qt" value="'+escQ(g('prefix_qt')||'QT')+'" style="'+inp+'"></div>'+
     '<div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">專案訂單</div><input type="text" id="s-pre-prj" value="'+escQ(g('prefix_prj')||'PRJ')+'" style="'+inp+'"></div>'+
     '<div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">採購單</div><input type="text" id="s-pre-os" value="'+escQ(g('prefix_os')||'PO')+'" style="'+inp+'"></div>'+
@@ -254,7 +255,7 @@ function saveSettings(){
     default_tax_rate:'s-deftax', default_quote_valid_days:'s-defvalid',
     default_project_days:'s-defdue', default_payment_days:'s-defpay', alert_due_days:'s-alertdays',
     no_year_fmt:'s-yr-fmt', no_separator:'s-sep', no_padding:'s-pad',
-    prefix_qt:'s-pre-qt', prefix_prj:'s-pre-prj', prefix_os:'s-pre-os', prefix_rfq:'s-pre-rfq',
+    prefix_qt:'s-pre-qt', prefix_prj:'s-pre-prj', prefix_os:'s-pre-os', prefix_rfq:'s-pre-rfq', prefix_prj_grp:'s-pre-prj-grp',
     pdf_page_size:'s-pdf-size', pdf_margin:'s-pdf-margin', pdf_font_size:'s-pdf-font',
     pdf_header_style:'s-pdf-hdr', pdf_accent_color:'s-pdf-color',
     pdf_qt_footer:'s-pdf-qt-footer', pdf_payment_terms:'s-pdf-payment', pdf_po_note:'s-pdf-po-note',
@@ -262,10 +263,30 @@ function saveSettings(){
     pdf_sign_purchaser:'s-sign-purchaser', pdf_sign_supplier:'s-sign-supplier',
     pdf_extra_signs:'s-sign-extra', pdf_sig_slot:'s-sig-slot',
   };
+  const oldPrefixes = {
+    prefix_qt: { tbl: 'quotes', col: 'quote_no', val: getSetting('prefix_qt','QT'), atype: 'quote' },
+    prefix_prj: { tbl: 'orders', col: 'order_no', val: getSetting('prefix_prj','PRJ'), atype: 'order' },
+    prefix_os: { tbl: 'outsource_orders', col: 'os_no', val: getSetting('prefix_os','PO'), atype: 'outsource' },
+    prefix_rfq: { tbl: 'rfqs', col: 'rfq_no', val: getSetting('prefix_rfq','RFQ'), atype: 'rfq' },
+    prefix_prj_grp: { tbl: 'projects', col: 'project_no', val: getSetting('prefix_prj_grp','PRJ_GRP'), atype: null },
+  };
+
   let saved=0;
   for(const[key,elId]of Object.entries(fields)){
     const el=document.getElementById(elId);
-    if(el){setSetting(key,el.value);saved++;}
+    if(el){
+      const newVal=el.value.trim();
+      const op=oldPrefixes[key];
+      if(op && newVal!==op.val && newVal.length>0){
+        const oldLen=op.val.length;
+        if(oldLen>0){
+          exec(`UPDATE ${op.tbl} SET ${op.col} = ? || SUBSTR(${op.col}, ?) WHERE ${op.col} LIKE ?`,[newVal, oldLen+1, op.val+'%']);
+          if(op.atype) exec(`UPDATE activity_log SET ref_no = ? || SUBSTR(ref_no, ?) WHERE type=? AND ref_no LIKE ?`,[newVal, oldLen+1, op.atype, op.val+'%']);
+        }
+      }
+      setSetting(key,el.value);
+      saved++;
+    }
   }
   // Save checkbox toggles (not in fields map since checkboxes use .checked not .value)
   ['seller','buyer','purchaser','supplier'].forEach(k=>{

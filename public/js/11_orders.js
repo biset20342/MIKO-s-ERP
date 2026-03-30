@@ -7,7 +7,7 @@
 /** 處理 renderOrders 相關操作。 */
 function renderOrders(){
   const s=getSort('orders','date');
-  let rows=q("SELECT o.*,c.name as cn FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.deleted_at IS NULL ORDER BY o.date DESC");
+  let rows=q("SELECT o.*,c.name as cn, p.project_no, p.title as p_title FROM orders o LEFT JOIN customers c ON o.customer_id=c.id LEFT JOIN projects p ON o.project_id=p.id WHERE o.deleted_at IS NULL ORDER BY o.date DESC");
   rows=sortArr(rows,s.col==='cn'?'cn':s.col,s.dir);
   return `<div class="panel"><div class="panel-header"><div class="panel-title">專案訂單</div><button class="btn btn-ghost btn-sm" onclick="exportOrdersCSV()">↓ CSV</button></div>
   <div class="filter-bar">
@@ -17,7 +17,7 @@ function renderOrders(){
     </select>
     <span class="filter-count" id="ord-count">${rows.length} 筆</span>
   </div>
-  <table><thead><tr>${sth('orders','order_no','專案號')}${sth('orders','title','標題')}${sth('orders','cn','客戶')}${sth('orders','date','建立日期')}${sth('orders','due_date','截止日')}${sth('orders','total','含稅金額')}<th>已收/應收</th><th>階段</th><th>操作</th></tr></thead>
+  <table><thead><tr>${sth('orders','order_no','訂單號')}<th>專案標題</th>${sth('orders','title','標題')}${sth('orders','cn','客戶')}${sth('orders','date','建立日期')}${sth('orders','due_date','截止日')}${sth('orders','total','含稅金額')}<th>已收/應收</th><th>階段</th><th>操作</th></tr></thead>
   <tbody id="ord-tbody">${renderOrdRows(rows)}</tbody></table></div>`;
 }
 
@@ -25,11 +25,13 @@ function renderOrders(){
 function renderOrdRows(rows){
   return rows.map(o=>{
     const active=o.phase!=='completed'&&o.phase!=='cancelled';
+    const canEdit=o.phase!=='cancelled';
     const over=o.due_date&&o.due_date<today()&&active;
     const paid=q1("SELECT SUM(amount) as v FROM receivables WHERE order_id=? AND status='paid'",[o.id])?.v||0;
     const paidPct=o.total>0?Math.round(paid/o.total*100):0;
     return `<tr>
     <td class="td-mono td-main">${o.order_no}</td>
+    <td class="td-main" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.p_title?`<span style="color:var(--accent5)" title="${o.p_title}">${o.p_title}</span>`:'—'}</td>
     <td class="td-main" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.title||'—'}</td>
     <td>${o.cn||'—'}</td>
     <td class="td-mono">${o.date||'—'}</td>
@@ -39,7 +41,7 @@ function renderOrdRows(rows){
     <td id="ph-badge-${o.id}">${phBadge(o.phase)}</td>
     <td><div class="td-actions">
       <button class="btn btn-sm btn-ghost" onclick="showOrderDetail(${o.id})">詳情</button>
-      ${active?`<button class="btn btn-sm btn-ghost" onclick="showEditOrder(${o.id})">編輯</button>`:''}
+      ${canEdit?`<button class="btn btn-sm btn-ghost" onclick="showEditOrder(${o.id})">編輯</button>`:''}
       ${active?`<button class="btn btn-sm btn-warning" onclick="cancelOrder(${o.id})">取消</button>`:''}
       ${o.phase==='cancelled'?`<button class="btn btn-sm btn-success" onclick="reactivateOrder(${o.id})">重新啟用</button>`:''}
       <button class="btn btn-sm btn-danger" onclick="softDelete('orders',${o.id},'${o.order_no}')">🗑️</button>
@@ -72,9 +74,9 @@ function reactivateOrder(id){
 
 /** 處理 filterOrd 相關操作。 */
 function filterOrd(sq,ph){
-  let rows=q("SELECT o.*,c.name as cn FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.deleted_at IS NULL ORDER BY o.date DESC");
+  let rows=q("SELECT o.*,c.name as cn, p.project_no, p.title as p_title FROM orders o LEFT JOIN customers c ON o.customer_id=c.id LEFT JOIN projects p ON o.project_id=p.id WHERE o.deleted_at IS NULL ORDER BY o.date DESC");
   if(ph)rows=rows.filter(r=>r.phase===ph);
-  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['order_no','title','cn'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
+  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['order_no','project_no','p_title','title','cn'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
   document.getElementById('ord-tbody').innerHTML=renderOrdRows(rows);
   document.getElementById('ord-count').textContent=rows.length+' 筆';
 }
@@ -94,7 +96,7 @@ function showOrderDetail(id){
 
   const srcQuote=o.quote_id?q1("SELECT id,quote_no,version,title FROM quotes WHERE id=?",[o.quote_id]):null;
 
-  const canEdit=o.phase!=='completed'&&o.phase!=='cancelled';
+  const canEdit=o.phase!=='cancelled';
   openModal(`專案詳情 — ${o.order_no}`,
     `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div style="font-size:15px;font-weight:600;color:var(--text)">${o.title||''}</div>
@@ -158,6 +160,7 @@ function showEditOrder(id){
   const items=q("SELECT * FROM order_items WHERE order_id=?",[id]);
   let delivs=[];try{delivs=JSON.parse(o.deliverables||'[]');}catch(e){}
   _svcs=q("SELECT id,name,unit,default_price,category FROM services ORDER BY category,name");
+  _projs=q("SELECT id,project_no,title FROM projects WHERE status='active' AND deleted_at IS NULL ORDER BY date DESC");
   openModal(`編輯訂單 — ${o.order_no}`,
     `<div class="form-row"><label>專案標題</label><input type="text" id="f-title" value="${escQ(o.title||'')}"></div>
     <div class="form-row-3">
@@ -165,6 +168,7 @@ function showEditOrder(id){
       <div class="form-row"><label>截止日</label><input type="date" id="f-due" value="${o.due_date||''}"></div>
       <div class="form-row"><label>階段</label><select id="f-phase">${PHASES.map(p=>`<option value="${p.key}"${p.key===o.phase?' selected':''}>${p.label}</option>`).join('')}</select></div>
     </div>
+    <div class="form-row"><label>歸屬專案</label><select id="f-proj"><option value="">-- 無關聯專案 --</option>${_projs.map(p=>`<option value="${p.id}"${p.id===o.project_id?' selected':''}>${p.project_no} - ${p.title}</option>`).join('')}</select></div>
     <div class="form-row"><label>營業稅率</label><select id="f-tax" onchange="recalc()"><option value="5"${(o.tax_rate||5)==5?' selected':''}>5%</option><option value="0"${o.tax_rate==0?' selected':''}>0%（免稅）</option></select></div>
     <div class="form-section-title">服務項目（修改後將重新計算金額）</div>
     <div style="display:grid;grid-template-columns:1fr 72px 72px 100px 22px;gap:5px;margin-bottom:5px"><div style="font-size:10px;color:var(--text3)">說明</div><div style="font-size:10px;color:var(--text3)">數量</div><div style="font-size:10px;color:var(--text3)">單位</div><div style="font-size:10px;color:var(--text3)">單價(未稅)</div><div></div></div>
@@ -184,6 +188,7 @@ function showEditOrder(id){
       const due=document.getElementById('f-due').value;
       const phase=document.getElementById('f-phase').value;
       const taxRate=parseFloat(document.getElementById('f-tax').value||'5');
+      const projId=document.getElementById('f-proj').value||null;
       const notes=document.getElementById('f-notes').value;
       const items2=getItems();
       const excl=items2.reduce((s,i)=>s+i.qty*i.price,0);
@@ -191,7 +196,7 @@ function showEditOrder(id){
       const total=excl+tax;
       const delivs2=[];
       document.querySelectorAll('.deliv-input').forEach(inp=>{const t=inp.value.trim();if(t)delivs2.push({text:t,done:false});});
-      exec("UPDATE orders SET title=?,date=?,due_date=?,phase=?,tax_rate=?,total_excl=?,tax_amount=?,total=?,deliverables=?,notes=? WHERE id=?",[title,date||null,due||null,phase,taxRate,excl,tax,total,JSON.stringify(delivs2),notes,id]);
+      exec("UPDATE orders SET project_id=?,title=?,date=?,due_date=?,phase=?,tax_rate=?,total_excl=?,tax_amount=?,total=?,deliverables=?,notes=? WHERE id=?",[projId,title,date||null,due||null,phase,taxRate,excl,tax,total,JSON.stringify(delivs2),notes,id]);
       exec("DELETE FROM order_items WHERE order_id=?",[id]);
       items2.forEach(i=>{const svc=_svcs.find(s=>s.name===i.desc);exec("INSERT INTO order_items(order_id,service_id,description,qty,unit,unit_price,is_subitem) VALUES(?,?,?,?,?,?,?)",[id,svc?.id||null,i.desc,i.qty,i.unit,i.price,i.isSub?1:0]);});
       toast('訂單已更新','success');closeModal();go(cur);
@@ -203,6 +208,7 @@ function showEditOrder(id){
 function showAddOrder(){
   _custs=q("SELECT id,name FROM customers ORDER BY name");
   _svcs=q("SELECT id,name,unit,default_price,category FROM services ORDER BY category,name");
+  _projs=q("SELECT id,project_no,title FROM projects WHERE status='active' AND deleted_at IS NULL ORDER BY date DESC");
   const defTax=getSetting('default_tax_rate','5');
   const defDays=parseInt(getSetting('default_project_days','30'));
   const defPay=parseInt(getSetting('default_payment_days','30'));
@@ -214,6 +220,7 @@ function showAddOrder(){
       <div class="form-row"><label>截止日</label><input type="date" id="f-due" value="${addDays(today(),defDays)}"></div>
       <div class="form-row"><label>初始階段</label><select id="f-phase">${PHASES.filter(p=>p.key!=='cancelled').map(p=>`<option value="${p.key}">${p.label}</option>`).join('')}</select></div>
     </div>
+    <div class="form-row"><label>歸屬專案</label><select id="f-proj"><option value="">-- 無關聯專案 --</option>${_projs.map(p=>`<option value="${p.id}">${p.project_no} - ${p.title}</option>`).join('')}</select></div>
     <div class="form-row"><label>營業稅率</label><select id="f-tax" onchange="recalc()"><option value="5" ${defTax==='5'?'selected':''}>5%</option><option value="0" ${defTax==='0'?'selected':''}>0%（免稅）</option></select></div>
     <div class="form-section-title">服務項目</div>
     <div style="display:grid;grid-template-columns:1fr 72px 72px 100px 22px;gap:5px;margin-bottom:5px"><div style="font-size:10px;color:var(--text3)">說明</div><div style="font-size:10px;color:var(--text3)">數量</div><div style="font-size:10px;color:var(--text3)">單位</div><div style="font-size:10px;color:var(--text3)">單價(未稅)</div><div></div></div>
@@ -242,6 +249,7 @@ function saveOrder(){
   const due=document.getElementById('f-due').value;
   const phase=document.getElementById('f-phase').value;
   const taxRate=parseFloat(document.getElementById('f-tax').value||'5');
+  const projId=document.getElementById('f-proj').value||null;
   const notes=document.getElementById('f-notes').value;
   if(!title||!custId||!date){toast('請填寫標題、客戶與日期','error');return;}
   const items=getItems();
@@ -258,8 +266,8 @@ function saveOrder(){
   const tax=Math.round(excl*taxRate)/100;
   const total=excl+tax;
   const oNo=nextNo('PRJ','orders');
-  exec("INSERT INTO orders(order_no,customer_id,title,date,due_date,phase,status,total_excl,tax_rate,tax_amount,total,deliverables,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-    [oNo,custId,title,date,due||null,phase,'active',excl,taxRate,tax,total,JSON.stringify(delivs),notes]);
+  exec("INSERT INTO orders(project_id,order_no,customer_id,title,date,due_date,phase,status,total_excl,tax_rate,tax_amount,total,deliverables,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    [projId,oNo,custId,title,date,due||null,phase,'active',excl,taxRate,tax,total,JSON.stringify(delivs),notes]);
   const oid=lastId();
   items.forEach(i=>{const svc=_svcs.find(s=>s.name===i.desc);exec("INSERT INTO order_items(order_id,service_id,description,qty,unit,unit_price,is_subitem) VALUES(?,?,?,?,?,?,?)",[oid,svc?.id||null,i.desc,i.qty,i.unit,i.price,i.isSub?1:0]);});
   const defPayDays=parseInt(getSetting('default_payment_days','30'));

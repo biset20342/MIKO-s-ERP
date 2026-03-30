@@ -7,7 +7,7 @@
 /** 處理 renderOS 相關操作。 */
 function renderOS(){
   const s=getSort('outsource','date');
-  let rows=q("SELECT os.*,s.name as sn,o.order_no,o.title,r.rfq_no FROM outsource_orders os LEFT JOIN suppliers s ON os.supplier_id=s.id LEFT JOIN orders o ON os.order_id=o.id LEFT JOIN rfqs r ON os.rfq_id=r.id WHERE os.deleted_at IS NULL ORDER BY os.date DESC");
+  let rows=q("SELECT os.*,s.name as sn,o.order_no,o.title,r.rfq_no,p.project_no FROM outsource_orders os LEFT JOIN suppliers s ON os.supplier_id=s.id LEFT JOIN orders o ON os.order_id=o.id LEFT JOIN rfqs r ON os.rfq_id=r.id LEFT JOIN projects p ON os.project_id=p.id WHERE os.deleted_at IS NULL ORDER BY os.date DESC");
   rows=sortArr(rows,s.col==='sn'?'sn':s.col,s.dir);
   return `<div class="panel"><div class="panel-header"><div class="panel-title">採購單管理 <span style="font-size:11px;color:var(--text3);font-weight:400">由詢價單產生或直接建立</span></div><button class="btn btn-ghost btn-sm" onclick="exportOSCSV()">↓ CSV</button></div>
   <div class="filter-bar">
@@ -17,7 +17,7 @@ function renderOS(){
     </select>
     <span class="filter-count" id="os-count">${rows.length} 筆</span>
   </div>
-  <table><thead><tr>${sth('outsource','os_no','委外單號')}${sth('outsource','sn','廠商')}${sth('outsource','description','說明')}<th>關聯專案</th>${sth('outsource','date','日期')}${sth('outsource','expected_date','預計完成')}${sth('outsource','total','含稅金額')}<th>廠商報價</th><th>狀態</th><th>操作</th></tr></thead>
+  <table><thead><tr>${sth('outsource','os_no','委外單號')}${sth('outsource','sn','廠商')}${sth('outsource','description','說明')}<th>歸屬專案</th><th>關聯訂單</th>${sth('outsource','date','日期')}${sth('outsource','expected_date','預計完成')}${sth('outsource','total','含稅金額')}<th>廠商報價</th><th>狀態</th><th>操作</th></tr></thead>
   <tbody id="os-tbody">${renderOSRows(rows)}</tbody></table></div>`;
 }
 
@@ -29,6 +29,7 @@ function renderOSRows(rows){
     '<td class="td-mono td-main">'+os.os_no+'</td>'+
     '<td class="td-main">'+( os.sn||'—')+'</td>'+
     '<td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(os.description||'—')+'</td>'+
+    '<td class="td-mono">'+(os.project_no?'<span style="color:var(--accent5)">'+os.project_no+'</span>':'—')+'</td>'+
     '<td class="td-mono">'+(os.order_no?'<span style="color:var(--accent5)">'+os.order_no+'</span>':'—')+(os.rfq_no?'<br><span style="font-size:10px;color:var(--text3)">來自 '+os.rfq_no+'</span>':'')+'</td>'+
     '<td class="td-mono">'+(os.date||'')+'</td>'+
     '<td class="td-mono">'+(os.expected_date||'—')+'</td>'+
@@ -67,9 +68,9 @@ function cancelOS(id){confirmDialog('確定取消此委外單？',()=>{exec("UPD
 
 /** 處理 filterOS 相關操作。 */
 function filterOS(sq,st){
-  let rows=q("SELECT os.*,s.name as sn,o.order_no,r.rfq_no FROM outsource_orders os LEFT JOIN suppliers s ON os.supplier_id=s.id LEFT JOIN orders o ON os.order_id=o.id LEFT JOIN rfqs r ON os.rfq_id=r.id WHERE os.deleted_at IS NULL ORDER BY os.date DESC");
+  let rows=q("SELECT os.*,s.name as sn,o.order_no,r.rfq_no,p.project_no FROM outsource_orders os LEFT JOIN suppliers s ON os.supplier_id=s.id LEFT JOIN orders o ON os.order_id=o.id LEFT JOIN rfqs r ON os.rfq_id=r.id LEFT JOIN projects p ON os.project_id=p.id WHERE os.deleted_at IS NULL ORDER BY os.date DESC");
   if(st)rows=rows.filter(r=>r.status===st);
-  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['os_no','sn','description','order_no'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
+  if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>['os_no','sn','description','order_no','project_no'].some(f=>String(r[f]||'').toLowerCase().includes(s)));}
   document.getElementById('os-tbody').innerHTML=renderOSRows(rows);
   document.getElementById('os-count').textContent=rows.length+' 筆';
 }
@@ -79,9 +80,13 @@ function showEditOS(id){
   const os=q1("SELECT * FROM outsource_orders WHERE id=?",[id]);
   const items=q("SELECT * FROM os_items WHERE os_id=?",[id]);
   const activeOrders=q("SELECT id,order_no,title FROM orders WHERE status='active' AND phase NOT IN('completed','cancelled') ORDER BY date DESC");
+  const _projs=q("SELECT id,project_no,title FROM projects WHERE status='active' AND deleted_at IS NULL ORDER BY date DESC");
   _svcs=q("SELECT id,name,unit,default_price,category FROM services ORDER BY category,name");
   openModal(`編輯委外單 — ${os.os_no}`,
-    `<div class="form-row"><label>關聯專案</label><select id="f-ord"><option value="">不關聯</option>${activeOrders.map(o=>`<option value="${o.id}"${os.order_id==o.id?' selected':''}>[${o.order_no}] ${o.title}</option>`).join('')}</select></div>
+    `<div class="form-row-2">
+      <div class="form-row"><label>歸屬專案</label><select id="f-proj"><option value="">無</option>${_projs.map(p=>`<option value="${p.id}"${p.id===os.project_id?' selected':''}>${p.project_no} - ${p.title}</option>`).join('')}</select></div>
+      <div class="form-row"><label>關聯訂單</label><select id="f-ord"><option value="">無</option>${activeOrders.map(o=>`<option value="${o.id}"${os.order_id==o.id?' selected':''}>[${o.order_no}] ${o.title}</option>`).join('')}</select></div>
+    </div>
     <div class="form-row"><label>委外說明</label><input type="text" id="f-desc" value="${escQ(os.description||'')}"></div>
     <div class="form-row-3">
       <div class="form-row"><label>建立日期</label><input type="date" id="f-date" value="${os.date||today()}"></div>
@@ -104,6 +109,7 @@ function showEditOS(id){
       <button class="btn btn-ghost btn-sm" onclick="copyPath('${escQ(os.quote_file_url)}')">📋 複製路徑</button>
     </div>`:''}`,
     ()=>{
+      const projId=document.getElementById('f-proj').value||null;
       const ordId=document.getElementById('f-ord').value||null;
       const desc=document.getElementById('f-desc').value.trim();
       const date=document.getElementById('f-date').value;
@@ -115,7 +121,7 @@ function showEditOS(id){
       const excl=items2.reduce((s,i)=>s+i.qty*i.price,0);
       const tax=Math.round(excl*taxRate)/100;
       const total=excl+tax;
-      exec("UPDATE outsource_orders SET order_id=?,description=?,date=?,expected_date=?,tax_rate=?,total_excl=?,tax_amount=?,total=?,notes=?,quote_file_url=? WHERE id=?",[ordId,desc,date||null,exp||null,taxRate,excl,tax,total,notes,quoteUrl||null,id]);
+      exec("UPDATE outsource_orders SET project_id=?,order_id=?,description=?,date=?,expected_date=?,tax_rate=?,total_excl=?,tax_amount=?,total=?,notes=?,quote_file_url=? WHERE id=?",[projId,ordId,desc,date||null,exp||null,taxRate,excl,tax,total,notes,quoteUrl||null,id]);
       exec("DELETE FROM os_items WHERE os_id=?",[id]);
       items2.forEach(i=>exec("INSERT INTO os_items(os_id,description,qty,unit,unit_price) VALUES(?,?,?,?,?)",[id,i.desc,i.qty,i.unit,i.price]));
       exec("UPDATE payables SET amount=? WHERE os_id=?",[total,id]);
@@ -128,11 +134,15 @@ function showEditOS(id){
 function showAddOS(){
   _supps=q("SELECT id,name,specialty FROM suppliers ORDER BY name");
   _svcs=q("SELECT id,name,unit,default_price FROM services ORDER BY name");
+  const _projs=q("SELECT id,project_no,title FROM projects WHERE status='active' AND deleted_at IS NULL ORDER BY date DESC");
   const activeOrders=q("SELECT id,order_no,title FROM orders WHERE status='active' AND phase NOT IN('completed','cancelled') AND deleted_at IS NULL ORDER BY date DESC");
   const defTax=getSetting('default_tax_rate','5');
   const defPay=parseInt(getSetting('default_payment_days','30'));
   openModal('新增委外單',
-    `<div class="form-row"><label>關聯專案（選填）</label><select id="f-ord"><option value="">不關聯</option>${activeOrders.map(o=>`<option value="${o.id}">[${o.order_no}] ${o.title}</option>`).join('')}</select></div>
+    `<div class="form-row-2">
+      <div class="form-row"><label>歸屬專案（選填）</label><select id="f-proj"><option value="">不關聯</option>${_projs.map(p=>`<option value="${p.id}">${p.project_no} - ${p.title}</option>`).join('')}</select></div>
+      <div class="form-row"><label>關聯訂單（選填）</label><select id="f-ord"><option value="">不關聯</option>${activeOrders.map(o=>`<option value="${o.id}">[${o.order_no}] ${o.title}</option>`).join('')}</select></div>
+    </div>
     <div class="form-row"><label>合作廠商 *</label><select id="f-supp"><option value="">-- 選擇廠商 --</option>${_supps.map(s=>`<option value="${s.id}">${s.name}${s.specialty?` (${s.specialty})`:''}</option>`).join('')}</select></div>
     <div class="form-row"><label>委外說明 *</label><input type="text" id="f-desc" placeholder="例：CNC車床件 / 鈑金加工..."></div>
     <div class="form-row-3">
@@ -158,6 +168,7 @@ function showAddOS(){
 
 /** 處理 saveOS 相關操作。 */
 function saveOS(){
+  const projId=document.getElementById('f-proj').value||null;
   const ordId=document.getElementById('f-ord').value||null;
   const suppId=document.getElementById('f-supp').value;
   const desc=document.getElementById('f-desc').value.trim();
@@ -172,8 +183,8 @@ function saveOS(){
   const tax=Math.round(excl*taxRate)/100;
   const total=excl+tax;
   const osNo=nextNo('OS','outsource_orders');
-  exec("INSERT INTO outsource_orders(os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description,notes,quote_file_url) VALUES(?,?,?,?,?,'pending',?,?,?,?,?,?,?)",
-    [osNo,ordId,suppId,date,exp||null,excl,taxRate,tax,total,desc,notes,quoteUrl||null]);
+  exec("INSERT INTO outsource_orders(project_id,os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description,notes,quote_file_url) VALUES(?,?,?,?,?,?,?,'pending',?,?,?,?,?,?,?,?)",
+    [projId,osNo,ordId,suppId,date,exp||null,excl,taxRate,tax,total,desc,notes,quoteUrl||null]);
   const osid=lastId();
   items.forEach(i=>exec("INSERT INTO os_items(os_id,description,qty,unit,unit_price) VALUES(?,?,?,?,?)",[osid,i.desc,i.qty,i.unit,i.price]));
   const defPayDays=parseInt(getSetting('default_payment_days','30'));

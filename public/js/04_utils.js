@@ -311,9 +311,10 @@ function updateNoPreview(){
   const el=document.getElementById('no-preview');
   if(!el)return;
   const qtEx=nextNo('QT','quotes');
+  const prjxEx=nextNo('PRJ_GRP','projects');
   const prjEx=nextNo('PRJ','orders');
   const osEx=nextNo('OS','outsource_orders');
-  el.textContent=qtEx+' / '+prjEx+' / '+osEx;
+  el.textContent=prjxEx+' / '+prjEx+' / '+qtEx+' / '+osEx;
 }
 
 /** 處理 applyUserSettings 相關操作。 */
@@ -476,48 +477,49 @@ function seedData(){
 /** 處理 init 相關操作。 */
 async function init(){
   try{
-    SQL=await initSqlJs({locateFile:f=>'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/'+f});
-    db=new SQL.Database();
-    db.run(SCHEMA);
-    // Migration for old DBs
-    ['quotes','quote_items'].forEach(t=>{
-      try{db.run(`CREATE TABLE IF NOT EXISTS ${t}(id INTEGER PRIMARY KEY AUTOINCREMENT)`);}catch(e){}
-    });
-    // New migrations
-    const migrations=[
-      "ALTER TABLE receivables ADD COLUMN milestone_name TEXT DEFAULT '全額付款'",
-      "ALTER TABLE orders ADD COLUMN quote_id INTEGER",
-      "ALTER TABLE quotes ADD COLUMN deleted_at TEXT DEFAULT NULL",
-      "ALTER TABLE quote_items ADD COLUMN is_subitem INTEGER DEFAULT 0",
-      "ALTER TABLE order_items ADD COLUMN is_subitem INTEGER DEFAULT 0",
-      "ALTER TABLE quotes ADD COLUMN parent_quote_id INTEGER",
-      "ALTER TABLE quotes ADD COLUMN converted_order_id INTEGER",
-      "ALTER TABLE quotes ADD COLUMN converted_at TEXT",
-      `CREATE TABLE IF NOT EXISTS quote_history(id INTEGER PRIMARY KEY AUTOINCREMENT,quote_id INTEGER,action TEXT NOT NULL,note TEXT,created_at TEXT DEFAULT(datetime('now','localtime')),FOREIGN KEY(quote_id)REFERENCES quotes(id))`,
-      "ALTER TABLE orders ADD COLUMN deleted_at TEXT DEFAULT NULL",
-      "ALTER TABLE outsource_orders ADD COLUMN deleted_at TEXT DEFAULT NULL",
-      "ALTER TABLE outsource_orders ADD COLUMN quote_file_url TEXT",
-      "ALTER TABLE outsource_orders ADD COLUMN rfq_id INTEGER",
-      `CREATE TABLE IF NOT EXISTS rfqs(id INTEGER PRIMARY KEY AUTOINCREMENT,rfq_no TEXT UNIQUE,order_id INTEGER,description TEXT,specs TEXT,date TEXT,deadline TEXT,status TEXT DEFAULT 'open',notes TEXT,deleted_at TEXT DEFAULT NULL,FOREIGN KEY(order_id)REFERENCES orders(id))`,
-      `CREATE TABLE IF NOT EXISTS rfq_suppliers(id INTEGER PRIMARY KEY AUTOINCREMENT,rfq_id INTEGER,supplier_id INTEGER,FOREIGN KEY(rfq_id)REFERENCES rfqs(id),FOREIGN KEY(supplier_id)REFERENCES suppliers(id))`,
-      `CREATE TABLE IF NOT EXISTS supplier_quotes(id INTEGER PRIMARY KEY AUTOINCREMENT,rfq_id INTEGER,supplier_id INTEGER,received_date TEXT,total_excl REAL DEFAULT 0,tax_rate REAL DEFAULT 5,tax_amount REAL DEFAULT 0,total REAL DEFAULT 0,lead_time_days INTEGER,file_url TEXT,notes TEXT,selected INTEGER DEFAULT 0,FOREIGN KEY(rfq_id)REFERENCES rfqs(id),FOREIGN KEY(supplier_id)REFERENCES suppliers(id))`,
-      `CREATE TABLE IF NOT EXISTS activity_log(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,action TEXT NOT NULL,ref_id INTEGER,ref_no TEXT,ref_title TEXT,amount REAL,entity TEXT,note TEXT,created_at TEXT DEFAULT(datetime('now','localtime')))`,
-      `CREATE TABLE IF NOT EXISTS phase_log(id INTEGER PRIMARY KEY AUTOINCREMENT,order_id INTEGER,phase TEXT NOT NULL,entered_at TEXT DEFAULT(datetime('now','localtime')),note TEXT,FOREIGN KEY(order_id)REFERENCES orders(id))`,
-      "ALTER TABLE quotes ADD COLUMN version INTEGER DEFAULT 1",
-      "ALTER TABLE quotes ADD COLUMN superseded_note TEXT",
-      "ALTER TABLE customers ADD COLUMN contact_person TEXT",
-      "ALTER TABLE customers ADD COLUMN job_title TEXT",
-      "ALTER TABLE customers ADD COLUMN tax_id TEXT",
-      "ALTER TABLE suppliers ADD COLUMN tax_id TEXT",
-    ];
-    migrations.forEach(sql=>{try{db.run(sql);}catch(e){}});
-    const check=q1("SELECT COUNT(*) as c FROM customers");
-    if(!check||check.c===0)seedData();
     applyUserSettings();
     initTheme();
     document.getElementById('loading').classList.remove('show');
     go('dashboard');
-  }catch(e){document.querySelector('.loading-text').textContent='載入失敗：'+e.message;}
+  }catch(e){
+    const lt = document.querySelector('.loading-text');
+    if(lt) lt.textContent='載入失敗：'+e.message;
+  }
+}
+
+/** 處理 importBackup 實作 */
+function importBackup() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.db,application/octet-stream';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    confirmDialog('⚠️ 警告：這將會完全覆蓋最近所有的資料修改，且操作無法還原！<br><br>您確定要從這個備份檔還原嗎？<br>(備註: 還原成功後系統將自動關閉以防止衝突，請您手動重新啟動 ProjectERP)', () => {
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        const base64 = btoa(new Uint8Array(re.target.result).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+        toast('正在上傳並還原資料庫...', 'info');
+        fetch('/api/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: base64 })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok) {
+            document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;font-family:sans-serif;background:var(--bg);color:var(--text)"><div style="font-size:40px;margin-bottom:20px">✅</div><div style="font-size:22px;margin-bottom:8px">資料庫還原完成</div><div style="font-size:14px;color:var(--text3);text-align:center;line-height:1.6">伺服器已安全下線以確保資料庫完整。<br>您可以關閉這個網頁視窗，並且再次執行「ProjectERP」捷徑重新啟動。</div></div>';
+            fetch('/api/shutdown', { method: 'POST' });
+          } else {
+            toast('還原失敗: ' + data.error, 'error');
+          }
+        })
+        .catch(err => toast('上傳失敗: ' + err.message, 'error'));
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
+  input.click();
 }
 
 init();

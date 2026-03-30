@@ -32,6 +32,7 @@ db.exec(`
 PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS customers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT,email TEXT,address TEXT,contact_person TEXT,job_title TEXT,tax_id TEXT,notes TEXT,created_at TEXT DEFAULT(date('now')));
 CREATE TABLE IF NOT EXISTS suppliers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT,email TEXT,contact TEXT,specialty TEXT,tax_id TEXT,notes TEXT);
+CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY AUTOINCREMENT,project_no TEXT UNIQUE,title TEXT NOT NULL,customer_id INTEGER,description TEXT,status TEXT DEFAULT 'active',date TEXT,expected_date TEXT,notes TEXT,deleted_at TEXT DEFAULT NULL,FOREIGN KEY(customer_id)REFERENCES customers(id));
 CREATE TABLE IF NOT EXISTS services(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,category TEXT,unit TEXT DEFAULT '式',default_price REAL DEFAULT 0,notes TEXT);
 CREATE TABLE IF NOT EXISTS quotes(id INTEGER PRIMARY KEY AUTOINCREMENT,quote_no TEXT UNIQUE,customer_id INTEGER,title TEXT,date TEXT,valid_until TEXT,status TEXT DEFAULT 'draft',version INTEGER DEFAULT 1,parent_quote_id INTEGER,converted_order_id INTEGER,converted_at TEXT,total_excl REAL DEFAULT 0,tax_rate REAL DEFAULT 5,tax_amount REAL DEFAULT 0,total REAL DEFAULT 0,notes TEXT,superseded_note TEXT,deleted_at TEXT DEFAULT NULL,FOREIGN KEY(customer_id)REFERENCES customers(id),FOREIGN KEY(parent_quote_id)REFERENCES quotes(id));
 CREATE TABLE IF NOT EXISTS quote_items(id INTEGER PRIMARY KEY AUTOINCREMENT,quote_id INTEGER,service_id INTEGER,description TEXT,qty REAL DEFAULT 1,unit TEXT DEFAULT '式',unit_price REAL,is_subitem INTEGER DEFAULT 0,FOREIGN KEY(quote_id)REFERENCES quotes(id));
@@ -71,6 +72,10 @@ const migrations = [
   "ALTER TABLE customers ADD COLUMN job_title TEXT",
   "ALTER TABLE customers ADD COLUMN tax_id TEXT",
   "ALTER TABLE suppliers ADD COLUMN tax_id TEXT",
+  "ALTER TABLE orders ADD COLUMN project_id INTEGER",
+  "ALTER TABLE quotes ADD COLUMN project_id INTEGER",
+  "ALTER TABLE outsource_orders ADD COLUMN project_id INTEGER",
+  "ALTER TABLE rfqs ADD COLUMN project_id INTEGER",
 ];
 migrations.forEach(sql => { try { db.exec(sql); } catch (e) { /* 欄位已存在，忽略 */ } });
 
