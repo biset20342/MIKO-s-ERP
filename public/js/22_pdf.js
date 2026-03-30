@@ -47,7 +47,7 @@ function printQuotePDF(id){
 
   const html=`<!DOCTYPE html>
 <html lang="zh-TW"><head><meta charset="UTF-8">
-<title>報價單 ${q2.quote_no}</title>
+<title>${q2.quote_no}_${q2.title}_${q2.date}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Noto Sans TC',sans-serif;font-size:${fontSize}px;color:#1a1a1a;background:#fff;padding:40px;}
@@ -77,7 +77,7 @@ function printQuotePDF(id){
   .totals .total-row td{padding:10px 12px;}
   .notes-box{margin-top:24px;padding:14px 16px;background:#fff9e6;border:1px solid #f0d060;border-radius:6px;}
   .notes-label{font-size:10px;font-weight:600;color:#888;letter-spacing:.5px;margin-bottom:6px;}
-  .notes-text{font-size:12px;color:#555;line-height:1.6;}
+  .notes-text{font-size:12px;color:#555;line-height:1.6;white-space:pre-wrap;}
   .footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e0e0;display:flex;justify-content:space-between;font-size:11px;color:#999;}
   .validity{margin-top:20px;padding:10px 14px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:5px;font-size:12px;color:#2e7d32;}
   .payment-terms{margin-top:12px;padding:10px 14px;background:#e3f2fd;border:1px solid #90caf9;border-radius:5px;font-size:12px;color:#1565c0;}

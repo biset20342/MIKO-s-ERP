@@ -118,10 +118,9 @@ function showEditOS(id){
       exec("UPDATE outsource_orders SET order_id=?,description=?,date=?,expected_date=?,tax_rate=?,total_excl=?,tax_amount=?,total=?,notes=?,quote_file_url=? WHERE id=?",[ordId,desc,date||null,exp||null,taxRate,excl,tax,total,notes,quoteUrl||null,id]);
       exec("DELETE FROM os_items WHERE os_id=?",[id]);
       items2.forEach(i=>exec("INSERT INTO os_items(os_id,description,qty,unit,unit_price) VALUES(?,?,?,?,?)",[id,i.desc,i.qty,i.unit,i.price]));
-      // Update payable amount
       exec("UPDATE payables SET amount=? WHERE os_id=?",[total,id]);
       toast('委外單已更新','success');closeModal();go(cur);
-    });
+    }, true);
   setTimeout(recalc,50);
 }
 
@@ -153,7 +152,7 @@ function showAddOS(){
       <input type="text" id="f-quote-url" placeholder="\\\\NAS\\共用\\報價單\\廠商名稱_日期.xlsx">
     </div>
     <div class="form-note"><span class="auto-tag">AUTO</span> 儲存後自動建立應付帳款</div>`,
-    saveOS);
+    saveOS, true);
   addItemRow('order-items');
 }
 
@@ -224,7 +223,7 @@ function printOSPDF(id){
 
   const html=`<!DOCTYPE html>
 <html lang="zh-TW"><head><meta charset="UTF-8">
-<title>採購單 ${os.os_no}</title>
+<title>${os.os_no}_${os.description}_${os.date}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Noto Sans TC',sans-serif;font-size:${fontSize}px;color:#1a1a1a;background:#fff;padding:40px;}
@@ -324,8 +323,8 @@ function printOSPDF(id){
     </div>
   </div>
 
-  ${os.notes?`<div class="notes-box"><div class="notes-label">備註 / 特殊需求</div><div style="font-size:12px;color:#555;line-height:1.6">${os.notes}</div></div>`:''}
-  ${poNote?`<div class="notes-box" style="margin-top:10px"><div class="notes-label">採購備注</div><div style="font-size:12px;color:#555;line-height:1.6">${poNote}</div></div>`:''}
+  ${os.notes?`<div class="notes-box"><div class="notes-label">備註 / 特殊需求</div><div style="font-size:12px;color:#555;line-height:1.6;white-space:pre-wrap;">${os.notes}</div></div>`:''}
+  ${poNote?`<div class="notes-box" style="margin-top:10px"><div class="notes-label">採購備注</div><div style="font-size:12px;color:#555;line-height:1.6;white-space:pre-wrap;">${poNote}</div></div>`:''}
   ${os.quote_file_url?`<div class="nas-box">📄 廠商報價檔案路徑：<strong>${os.quote_file_url}</strong></div>`:''}
 
   <div class="stamp-area">

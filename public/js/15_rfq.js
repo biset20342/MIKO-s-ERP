@@ -90,7 +90,7 @@ function showAddRFQ(){
       selSupps.forEach(sid=>exec("INSERT INTO rfq_suppliers(rfq_id,supplier_id) VALUES(?,?)",[rid,sid]));
       toast(`詢價單 ${rfqNo} 已建立，已選 ${selSupps.length} 家廠商`,'success');
       closeModal();go(cur);
-    });
+    }, true);
 }
 
 /** 處理 showRFQDetail 相關操作。 */
@@ -210,7 +210,7 @@ function showEditRFQ(id){
       exec("DELETE FROM rfq_suppliers WHERE rfq_id=?",[id]);
       newSupps.forEach(sid=>exec("INSERT INTO rfq_suppliers(rfq_id,supplier_id) VALUES(?,?)",[id,sid]));
       toast('詢價單已更新','success');closeModal();go(cur);
-    });
+    }, true);
 }
 
 /** 處理 closeRFQ 相關操作。 */

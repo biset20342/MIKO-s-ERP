@@ -5,11 +5,49 @@
  */
 
 let _analyticsTab='profit';
+let _analyticsStartDate='';
+let _analyticsEndDate='';
+let _analyticsQuickRange='';
+
+function getAnalyticsDateFilter(col){
+  if(_analyticsStartDate && _analyticsEndDate) {
+    return ` AND ${col} >= '${_analyticsStartDate}' AND ${col} <= '${_analyticsEndDate}'`;
+  }
+  return '';
+}
+
+function setAnalyticsQuickRange(val){
+  _analyticsQuickRange = val;
+  if(val==='all'){
+    _analyticsStartDate='';
+    _analyticsEndDate='';
+  } else if(val){
+    const end = new Date();
+    const start = new Date();
+    if(val==='1m') start.setMonth(start.getMonth()-1);
+    else if(val==='6m') start.setMonth(start.getMonth()-6);
+    else if(val==='1y') start.setFullYear(start.getFullYear()-1);
+    else if(val==='2y') start.setFullYear(start.getFullYear()-2);
+    _analyticsEndDate=end.toISOString().split('T')[0];
+    _analyticsStartDate=start.toISOString().split('T')[0];
+  }
+  document.getElementById('analytics-start').value=_analyticsStartDate||'';
+  document.getElementById('analytics-end').value=_analyticsEndDate||'';
+  applyAnalyticsSettings();
+}
+
+function applyAnalyticsSettings() {
+  _analyticsStartDate = document.getElementById('analytics-start').value;
+  _analyticsEndDate = document.getElementById('analytics-end').value;
+  // Clear quick range if dates don't match exactly. But for simplicity, just let it be handled onchange.
+  go('analytics');
+}
 
 /** 處理 renderAnalytics 相關操作。 */
 function renderAnalytics(){
   // 全域 KPI 數據
-  const rows=q("SELECT o.id,o.order_no,o.title,c.name as cn,o.date,o.phase,o.total,COALESCE((SELECT SUM(os.total) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL),0) as cost FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ORDER BY o.date DESC");
+  const dtFilt = getAnalyticsDateFilter('o.date');
+  const rows=q(`SELECT o.id,o.order_no,o.title,c.name as cn,o.date,o.phase,o.total,COALESCE((SELECT SUM(os.total) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL),0) as cost FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} ORDER BY o.date DESC`);
   const totalRev=rows.reduce((s,r)=>s+r.total,0);
   const totalCost=rows.reduce((s,r)=>s+r.cost,0);
   const totalPft=totalRev-totalCost;
@@ -24,7 +62,24 @@ function renderAnalytics(){
     {key:'supplier',icon:'🏭',label:'廠商成本'},
   ];
 
-  return `<div class="kpi-grid">
+  return `<div style="display:flex;gap:12px;align-items:center;margin-bottom:18px;background:var(--surface);padding:12px 16px;border-radius:10px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,0.1)">
+    <label style="font-size:13px;color:var(--text2);margin-bottom:0;font-weight:600;display:flex;align-items:center;gap:6px;"><span style="font-size:15px">📅</span> 時間範圍：</label>
+    <select id="analytics-quick-range" onchange="setAnalyticsQuickRange(this.value)" style="padding:6px 10px;font-size:13px;border-radius:6px;border:1px solid var(--border);outline:none;background:var(--surface2);color:var(--text);cursor:pointer;min-width:110px;font-family:inherit;">
+      <option value="" ${_analyticsQuickRange===''?'selected':''}>自訂範圍</option>
+      <option value="1m" ${_analyticsQuickRange==='1m'?'selected':''}>近一個月</option>
+      <option value="6m" ${_analyticsQuickRange==='6m'?'selected':''}>近半年</option>
+      <option value="1y" ${_analyticsQuickRange==='1y'?'selected':''}>近一年</option>
+      <option value="2y" ${_analyticsQuickRange==='2y'?'selected':''}>近兩年</option>
+      <option value="all" ${_analyticsQuickRange==='all'?'selected':''}>全部時間</option>
+    </select>
+    <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);padding:2px;border-radius:6px;border:1px solid var(--border)">
+      <input type="date" id="analytics-start" value="${_analyticsStartDate}" style="padding:5px 8px;font-size:13px;border:none;outline:none;background:transparent;color:var(--text);border-radius:4px;font-family:inherit;" onchange="document.getElementById('analytics-quick-range').value=''">
+      <span style="color:var(--text3);font-weight:bold;font-size:12px">~</span>
+      <input type="date" id="analytics-end" value="${_analyticsEndDate}" style="padding:5px 8px;font-size:13px;border:none;outline:none;background:transparent;color:var(--text);border-radius:4px;font-family:inherit;" onchange="document.getElementById('analytics-quick-range').value=''">
+    </div>
+    <button class="btn btn-sm" style="background:var(--accent5);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:13px;margin-left:auto;font-weight:600;cursor:pointer;transition:opacity 0.2s" onclick="applyAnalyticsSettings()">套用過濾</button>
+  </div>
+  <div class="kpi-grid">
     <div class="kpi-card blue"><div class="kpi-label">總收入（含稅）</div><div class="kpi-value blue">$${fmt(totalRev)}</div><div class="kpi-delta">${rows.length} 個專案</div></div>
     <div class="kpi-card red"><div class="kpi-label">總委外成本</div><div class="kpi-value red">$${fmt(totalCost)}</div><div class="kpi-delta">${totalRev>0?Math.round(totalCost/totalRev*100):0}% 成本佔比</div></div>
     <div class="kpi-card green"><div class="kpi-label">毛利合計</div><div class="kpi-value green">$${fmt(totalPft)}</div><div class="kpi-delta ${totalPft>=0?'up':'dn'}">${totalPft>=0?'▲':'▼'} 淨利</div></div>
@@ -62,7 +117,8 @@ function renderAnalyticsTabContent(key){
 /** 處理 renderAnalyticsTab_profit 相關操作。 */
 function renderAnalyticsTab_profit(){
   const s=getSort('analytics','date');
-  let rows=q("SELECT o.id,o.order_no,o.title,c.name as cn,o.date,o.phase,o.total,COALESCE((SELECT SUM(os.total) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL),0) as cost FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ORDER BY o.date DESC");
+  const dtFilt = getAnalyticsDateFilter('o.date');
+  let rows=q(`SELECT o.id,o.order_no,o.title,c.name as cn,o.date,o.phase,o.total,COALESCE((SELECT SUM(os.total) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL),0) as cost FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} ORDER BY o.date DESC`);
   rows=sortArr(rows,s.col==='cn'?'cn':s.col,s.dir);
   return `<div class="panel"><div class="panel-header"><div class="panel-title">逐案利潤分析</div><button class="btn btn-ghost btn-sm" onclick="exportProfitCSV()">↓ CSV</button></div>
   <div class="filter-bar"><input type="text" placeholder="搜尋專案號、標題、客戶..." oninput="filterPft(this.value)"><span class="filter-count" id="pft-count">${rows.length} 筆</span></div>
@@ -72,7 +128,8 @@ function renderAnalyticsTab_profit(){
 
 /** 處理 renderAnalyticsTab_project 相關操作。 */
 function renderAnalyticsTab_project(){
-  const orders=q("SELECT o.id,o.order_no,o.title,c.name as cn FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ORDER BY o.date DESC");
+  const dtFilt = getAnalyticsDateFilter('o.date');
+  const orders=q(`SELECT o.id,o.order_no,o.title,c.name as cn FROM orders o LEFT JOIN customers c ON o.customer_id=c.id WHERE o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} ORDER BY o.date DESC`);
   return `<div class="proj-select-bar">
     <span style="font-size:13px;color:var(--text2);white-space:nowrap">📋 選擇專案：</span>
     <select id="proj-pnl-select" onchange="renderProjectDetail(this.value)">
@@ -85,13 +142,21 @@ function renderAnalyticsTab_project(){
 
 /** 處理 renderAnalyticsTab_monthly 相關操作。 */
 function renderAnalyticsTab_monthly(){
-  // 取得近 12 個月的資料
   const months=[];
-  const now=new Date();
-  for(let i=11;i>=0;i--){
-    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
-    months.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));
+  let endD = new Date();
+  let startD = new Date(endD.getFullYear(),endD.getMonth()-11,1);
+  if(_analyticsStartDate && _analyticsEndDate) {
+    endD = new Date(_analyticsEndDate);
+    startD = new Date(_analyticsStartDate);
+    startD.setDate(1); 
   }
+
+  let curD = new Date(startD);
+  while(curD <= endD) {
+    months.push(curD.getFullYear()+'-'+String(curD.getMonth()+1).padStart(2,'0'));
+    curD.setMonth(curD.getMonth()+1);
+  }
+
   const data=months.map(m=>{
     const rev=q1("SELECT COALESCE(SUM(total),0) as v FROM orders WHERE strftime('%Y-%m',date)=? AND phase NOT IN('cancelled') AND deleted_at IS NULL",[m])?.v||0;
     const cost=q1("SELECT COALESCE(SUM(total),0) as v FROM outsource_orders WHERE strftime('%Y-%m',date)=? AND deleted_at IS NULL",[m])?.v||0;
@@ -100,7 +165,7 @@ function renderAnalyticsTab_monthly(){
   });
   const maxRev=Math.max(...data.map(d=>d.rev),1);
 
-  // 年度合計
+  // 年度合計 (範圍合計)
   const yearRev=data.reduce((s,d)=>s+d.rev,0);
   const yearCost=data.reduce((s,d)=>s+d.cost,0);
   const yearProfit=yearRev-yearCost;
@@ -108,12 +173,12 @@ function renderAnalyticsTab_monthly(){
   const yearCount=data.reduce((s,d)=>s+d.count,0);
 
   return `<div class="stat-mini-grid">
-    <div class="stat-mini"><div class="stat-mini-label">近12月總收入</div><div class="stat-mini-val" style="color:var(--accent)">$${fmt(yearRev)}</div></div>
-    <div class="stat-mini"><div class="stat-mini-label">近12月總成本</div><div class="stat-mini-val" style="color:var(--accent4)">$${fmt(yearCost)}</div></div>
-    <div class="stat-mini"><div class="stat-mini-label">近12月毛利</div><div class="stat-mini-val" style="color:var(--accent2)">$${fmt(yearProfit)}</div></div>
+    <div class="stat-mini"><div class="stat-mini-label">範圍內總收入</div><div class="stat-mini-val" style="color:var(--accent)">$${fmt(yearRev)}</div></div>
+    <div class="stat-mini"><div class="stat-mini-label">範圍內總成本</div><div class="stat-mini-val" style="color:var(--accent4)">$${fmt(yearCost)}</div></div>
+    <div class="stat-mini"><div class="stat-mini-label">範圍內毛利</div><div class="stat-mini-val" style="color:var(--accent2)">$${fmt(yearProfit)}</div></div>
     <div class="stat-mini"><div class="stat-mini-label">總案量</div><div class="stat-mini-val" style="color:var(--accent5)">${yearCount}</div></div>
   </div>
-  <div class="panel"><div class="panel-header"><div class="panel-title">月度趨勢（近 12 個月）</div>
+  <div class="panel"><div class="panel-header"><div class="panel-title">月度趨勢（${months.length} 個月）</div>
     <button class="btn btn-ghost btn-sm" onclick="exportMonthlyCSV()">↓ CSV</button>
   </div>
   <table><thead><tr><th>月份</th><th>案件數</th><th>營收</th><th style="width:180px">營收趨勢</th><th>成本</th><th>毛利</th><th>毛利率</th></tr></thead><tbody>
@@ -148,7 +213,8 @@ function renderCustAnalyticsRows(rows,grandRev,maxRev){
 
 /** 處理 filterCustAnalytics 相關操作。 */
 function filterCustAnalytics(sq){
-  let rows=q("SELECT c.id,c.name,COUNT(o.id) as order_count,COALESCE(SUM(o.total),0) as total_rev,COALESCE(SUM((SELECT COALESCE(SUM(os.total),0) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL)),0) as total_cost FROM customers c LEFT JOIN orders o ON o.customer_id=c.id AND o.phase NOT IN('cancelled') AND o.deleted_at IS NULL GROUP BY c.id ORDER BY total_rev DESC");
+  const dtFilt = getAnalyticsDateFilter('o.date');
+  let rows=q(`SELECT c.id,c.name,COUNT(o.id) as order_count,COALESCE(SUM(o.total),0) as total_rev,COALESCE(SUM((SELECT COALESCE(SUM(os.total),0) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL)),0) as total_cost FROM customers c LEFT JOIN orders o ON o.customer_id=c.id AND o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} GROUP BY c.id ORDER BY total_rev DESC`);
   const grandRev=rows.reduce((s,r)=>s+r.total_rev,0);
   const maxRev=Math.max(...rows.map(r=>r.total_rev),1);
   if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>String(r.name||'').toLowerCase().includes(s));}
@@ -158,7 +224,8 @@ function filterCustAnalytics(sq){
 
 /** 處理 exportCustomerAnalyticsCSV 相關操作。 */
 function exportCustomerAnalyticsCSV(){
-  const rows=q("SELECT c.name,COUNT(o.id) as order_count,COALESCE(SUM(o.total),0) as total_rev,COALESCE(SUM((SELECT COALESCE(SUM(os.total),0) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL)),0) as total_cost FROM customers c LEFT JOIN orders o ON o.customer_id=c.id AND o.phase NOT IN('cancelled') AND o.deleted_at IS NULL GROUP BY c.id ORDER BY total_rev DESC");
+  const dtFilt = getAnalyticsDateFilter('o.date');
+  const rows=q(`SELECT c.name,COUNT(o.id) as order_count,COALESCE(SUM(o.total),0) as total_rev,COALESCE(SUM((SELECT COALESCE(SUM(os.total),0) FROM outsource_orders os WHERE os.order_id=o.id AND os.deleted_at IS NULL)),0) as total_cost FROM customers c LEFT JOIN orders o ON o.customer_id=c.id AND o.phase NOT IN('cancelled') AND o.deleted_at IS NULL ${dtFilt} GROUP BY c.id ORDER BY total_rev DESC`);
   exportCSV('customer-analytics-'+today()+'.csv',['客戶','訂單數','總收入','總成本','總毛利','毛利率%'],rows.map(r=>{const p=r.total_rev-r.total_cost;return[r.name,r.order_count,r.total_rev,r.total_cost,p,r.total_rev>0?Math.round(p/r.total_rev*100):0];}));
 }
 
@@ -176,7 +243,8 @@ function renderSuppAnalyticsRows(rows,grandCost,maxCost){
 
 /** 處理 filterSuppAnalytics 相關操作。 */
 function filterSuppAnalytics(sq){
-  let rows=q("SELECT s.id,s.name,s.specialty,COUNT(os.id) as os_count,COALESCE(SUM(os.total),0) as total_cost FROM suppliers s LEFT JOIN outsource_orders os ON os.supplier_id=s.id AND os.deleted_at IS NULL GROUP BY s.id ORDER BY total_cost DESC");
+  const dtFilt = getAnalyticsDateFilter('os.date');
+  let rows=q(`SELECT s.id,s.name,s.specialty,COUNT(os.id) as os_count,COALESCE(SUM(os.total),0) as total_cost FROM suppliers s LEFT JOIN outsource_orders os ON os.supplier_id=s.id AND os.deleted_at IS NULL ${dtFilt} GROUP BY s.id ORDER BY total_cost DESC`);
   const grandCost=rows.reduce((s,r)=>s+r.total_cost,0);
   const maxCost=Math.max(...rows.map(r=>r.total_cost),1);
   if(sq){const s=sq.toLowerCase();rows=rows.filter(r=>String(r.name||'').toLowerCase().includes(s));}
@@ -186,6 +254,7 @@ function filterSuppAnalytics(sq){
 
 /** 處理 exportSupplierAnalyticsCSV 相關操作。 */
 function exportSupplierAnalyticsCSV(){
-  const rows=q("SELECT s.name,s.specialty,COUNT(os.id) as os_count,COALESCE(SUM(os.total),0) as total_cost FROM suppliers s LEFT JOIN outsource_orders os ON os.supplier_id=s.id AND os.deleted_at IS NULL GROUP BY s.id ORDER BY total_cost DESC");
+  const dtFilt = getAnalyticsDateFilter('os.date');
+  const rows=q(`SELECT s.name,s.specialty,COUNT(os.id) as os_count,COALESCE(SUM(os.total),0) as total_cost FROM suppliers s LEFT JOIN outsource_orders os ON os.supplier_id=s.id AND os.deleted_at IS NULL ${dtFilt} GROUP BY s.id ORDER BY total_cost DESC`);
   exportCSV('supplier-analytics-'+today()+'.csv',['廠商','專長','採購單數','總成本','成本佔比%'],rows.map(r=>{const grand=rows.reduce((s2,r2)=>s2+r2.total_cost,0);return[r.name,r.specialty,r.os_count,r.total_cost,grand>0?Math.round(r.total_cost/grand*100):0];}));
 }
