@@ -90,7 +90,7 @@ function showAddRFQ(){
       const selSupps=[...document.querySelectorAll('.rfq-sup-cb:checked')].map(c=>parseInt(c.value));
       if(!desc||!date){toast('請填寫詢價說明與日期','error');return;}
       const rfqNo=nextNo('RFQ','rfqs');
-      exec("INSERT INTO rfqs(project_id,rfq_no,order_id,description,specs,date,deadline,status,notes) VALUES(?,?,?,?,?,?,?,?,'open',?)",
+      exec("INSERT INTO rfqs(project_id,rfq_no,order_id,description,specs,date,deadline,status,notes) VALUES(?,?,?,?,?,?,?,'open',?)",
         [projId,rfqNo,orderId,desc,specs,date,deadline||null,notes]);
       const rid=lastId();
       selSupps.forEach(sid=>exec("INSERT INTO rfq_suppliers(rfq_id,supplier_id) VALUES(?,?)",[rid,sid]));
@@ -182,7 +182,7 @@ function showSelectRFQQuote(rfqId){
       const tax=Math.round(excl*taxRate)/100;
       const total=excl+tax;
       const osNo=nextNo('PO','outsource_orders');
-      exec("INSERT INTO outsource_orders(project_id,os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description,notes,quote_file_url,rfq_id) VALUES(?,?,?,?,?,?,?,'pending',?,?,?,?,?,?,?,?)",
+      exec("INSERT INTO outsource_orders(project_id,os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description,notes,quote_file_url,rfq_id) VALUES(?,?,?,?,?,?,'pending',?,?,?,?,?,?,?,?)",
         [projId,osNo,ordId,suppId,date,exp||null,excl,taxRate,tax,total,desc,notes,sq.file_url||null,rfqId]);
       const osid=lastId();
       const defPayDays=parseInt(getSetting('default_payment_days','30'));

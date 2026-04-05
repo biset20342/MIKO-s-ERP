@@ -64,12 +64,14 @@ function q1(sql, p = []) {
 }
 
 function exec(sql, p = []) {
-  // 用 fetch（非同步），不阻塞 UI，後端立即寫盤
-  fetch('/api/exec', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sql, params: p }),
-  }).catch(e => console.error('[exec]', e, sql));
+  // 同步 XHR，確保寫入完成後再繼續（與 q() 一致，本機無延遲問題）
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/exec', false); // 同步
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.send(JSON.stringify({ sql, params: p }));
+    if (xhr.status !== 200) { console.error('[exec] HTTP', xhr.status, sql); }
+  } catch (e) { console.error('[exec]', e, sql); }
 }
 
 function execBatch(statements) {

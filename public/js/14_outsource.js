@@ -183,7 +183,7 @@ function saveOS(){
   const tax=Math.round(excl*taxRate)/100;
   const total=excl+tax;
   const osNo=nextNo('OS','outsource_orders');
-  exec("INSERT INTO outsource_orders(project_id,os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description,notes,quote_file_url) VALUES(?,?,?,?,?,?,?,'pending',?,?,?,?,?,?,?,?)",
+  exec("INSERT INTO outsource_orders(project_id,os_no,order_id,supplier_id,date,expected_date,status,total_excl,tax_rate,tax_amount,total,description,notes,quote_file_url) VALUES(?,?,?,?,?,?,'pending',?,?,?,?,?,?,?)",
     [projId,osNo,ordId,suppId,date,exp||null,excl,taxRate,tax,total,desc,notes,quoteUrl||null]);
   const osid=lastId();
   items.forEach(i=>exec("INSERT INTO os_items(os_id,description,qty,unit,unit_price) VALUES(?,?,?,?,?)",[osid,i.desc,i.qty,i.unit,i.price]));

@@ -182,7 +182,7 @@ function saveQuote(){
   const excl=items.reduce((s,i)=>s+i.qty*i.price,0);
   const tax=Math.round(excl*taxRate)/100;
   const qNo=nextNo('QT','quotes');
-  exec("INSERT INTO quotes(project_id,quote_no,customer_id,title,date,valid_until,status,total_excl,tax_rate,tax_amount,total,notes) VALUES(?,?,?,?,?,?,?,'draft',?,?,?,?,?)",
+  exec("INSERT INTO quotes(project_id,quote_no,customer_id,title,date,valid_until,status,total_excl,tax_rate,tax_amount,total,notes) VALUES(?,?,?,?,?,?,'draft',?,?,?,?,?)",
     [projId,qNo,custId,title,date,valid||null,excl,taxRate,tax,excl+tax,notes]);
   const qid=lastId();
   items.forEach(i=>{
